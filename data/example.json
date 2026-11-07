@@ -1,0 +1,18 @@
+{
+  "landlords": [
+    { "name": "Mom", "phone": "+1 203 555 0101" },
+    { "name": "Dad", "phone": "+1 203 555 0102" }
+  ],
+  "units": [
+    { "id": "naug-1", "address": "12 Oak St, Naugatuck, Unit 1", "tenant": { "name": "Maria", "phone": "+1 203 555 0201" } },
+    { "id": "tol-2", "address": "40 Elm Rd, Tolland, Unit 2", "tenant": { "name": "Kevin", "phone": "+1 860 555 0202" } },
+    { "id": "ham-3", "address": "7 Pine Ave, Hamden, Unit 3", "tenant": { "name": "Priya", "phone": "+1 203 555 0203" } }
+  ],
+  "vendors": [
+    { "code": "HVAC", "name": "Sam", "trade": "HVAC", "town": "all CT", "phone": "+1 203 555 0301" },
+    { "code": "JOHN", "name": "John", "trade": "handyman", "town": "Hamden", "phone": "+1 203 555 0302" },
+    { "code": "TOLLAND", "name": "Rob", "trade": "handyman", "town": "Tolland", "phone": "+1 860 555 0303" }
+  ],
+  "repairs": [],
+  "nextId": 1
+}

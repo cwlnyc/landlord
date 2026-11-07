@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Repair line simulator</title>
+<style>
+  :root { --bg:#f4f1ec; --fg:#1d1b18; --muted:#6b665e; --phone:#fff; --line:#e3ded5;
+          --me:#2f6fde; --bot:#ecebe8; --accent:#d97757; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#161513; --fg:#ece9e4; --muted:#9a948a; --phone:#201f1c; --line:#33312d;
+            --me:#3b7af0; --bot:#2c2a27; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.4 system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; }
+  h1 { font-size:18px; margin:0; }
+  .clock { color:var(--muted); font-variant-numeric:tabular-nums; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; }
+  button { font:inherit; border:1px solid var(--line); background:var(--phone); color:var(--fg);
+           border-radius:8px; padding:6px 10px; cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  main { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:16px; padding:0 16px 24px; }
+  .phone { background:var(--phone); border:1px solid var(--line); border-radius:20px; display:flex;
+           flex-direction:column; height:min(640px,80vh); overflow:hidden; }
+  .phone h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+              margin:0; padding:12px 14px 4px; }
+  .phone select { margin:0 14px 8px; font:inherit; padding:4px; border-radius:6px;
+                  border:1px solid var(--line); background:var(--phone); color:var(--fg); }
+  .thread { flex:1; overflow-y:auto; padding:8px 12px; display:flex; flex-direction:column; gap:6px;
+            border-top:1px solid var(--line); }
+  .msg { max-width:85%; padding:7px 11px; border-radius:16px; white-space:pre-wrap; word-wrap:break-word; }
+  .msg.in { align-self:flex-start; background:var(--bot); }
+  .msg.out { align-self:flex-end; background:var(--me); color:#fff; }
+  .msg time { display:block; font-size:11px; opacity:.6; margin-top:2px; }
+  form { display:flex; gap:6px; padding:10px; border-top:1px solid var(--line); }
+  form input { flex:1; font:inherit; padding:8px 12px; border-radius:18px; border:1px solid var(--line);
+               background:var(--bg); color:var(--fg); min-width:0; }
+  .hint { color:var(--muted); font-size:13px; padding:0 14px 8px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Repair line simulator</h1>
+    <div class="clock" id="clock"></div>
+  </div>
+  <div class="bar">
+    <button data-hours="1">+1 hour</button>
+    <button data-hours="12">+12 hours</button>
+    <button data-hours="24">+1 day</button>
+    <button id="reset">Reset</button>
+  </div>
+</header>
+<main>
+  <section class="phone" data-role="landlord">
+    <h2>Landlord</h2><select></select>
+    <div class="hint">Try: SEND HVAC, LIST, DONE 1</div>
+    <div class="thread"></div>
+    <form><input placeholder="Text the repair line" autocomplete="off"><button class="primary">Send</button></form>
+  </section>
+  <section class="phone" data-role="tenant">
+    <h2>Tenant</h2><select></select>
+    <div class="hint">Try: heat not working</div>
+    <div class="thread"></div>
+    <form><input placeholder="Text the repair line" autocomplete="off"><button class="primary">Send</button></form>
+  </section>
+  <section class="phone" data-role="vendor">
+    <h2>Repair person</h2><select></select>
+    <div class="hint">Try: tomorrow 8am, or NO</div>
+    <div class="thread"></div>
+    <form><input placeholder="Text the repair line" autocomplete="off"><button class="primary">Send</button></form>
+  </section>
+</main>
+<script>
+const digits = (p) => p.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+let data = null;
+
+function people(role) {
+  if (role === "landlord") return data.state.landlords.map((l) => ({ label: l.name, phone: l.phone }));
+  if (role === "tenant") return data.state.units.map((u) => ({ label: `${u.tenant.name} (${u.address})`, phone: u.tenant.phone }));
+  return data.state.vendors.map((v) => ({ label: `${v.name} (${v.code}, ${v.trade})`, phone: v.phone }));
+}
+
+function fmt(iso) {
+  return new Date(iso).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function render() {
+  document.getElementById("clock").textContent = "Simulated time: " + fmt(data.now);
+  for (const phone of document.querySelectorAll(".phone")) {
+    const select = phone.querySelector("select");
+    const list = people(phone.dataset.role);
+    const chosen = select.value;
+    select.replaceChildren(...list.map((p) => new Option(p.label, p.phone)));
+    if (chosen && list.some((p) => p.phone === chosen)) select.value = chosen;
+    const me = digits(select.value);
+    const thread = phone.querySelector(".thread");
+    const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;
+    thread.replaceChildren(...data.log
+      .filter((m) => digits(m.to) === me || digits(m.from) === me)
+      .map((m) => {
+        const el = document.createElement("div");
+        el.className = "msg " + (digits(m.from) === me ? "out" : "in");
+        el.textContent = m.body;
+        const t = document.createElement("time");
+        t.textContent = fmt(m.at);
+        el.append(t);
+        return el;
+      }));
+    if (atBottom) thread.scrollTop = thread.scrollHeight;
+  }
+}
+
+async function refresh() {
+  data = await (await fetch("/api/state")).json();
+  render();
+}
+const post = (url, payload) =>
+  fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload ?? {}) }).then(refresh);
+
+for (const phone of document.querySelectorAll(".phone")) {
+  phone.querySelector("select").addEventListener("change", render);
+  phone.querySelector("form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = phone.querySelector("input");
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    post("/api/text", { from: phone.querySelector("select").value, text });
+  });
+}
+for (const b of document.querySelectorAll("[data-hours]")) {
+  b.addEventListener("click", () => post("/api/clock", { hours: Number(b.dataset.hours) }));
+}
+document.getElementById("reset").addEventListener("click", () => {
+  if (confirm("Start over? This clears every text and repair.")) post("/api/reset");
+});
+refresh();
+</script>
+</body>
+</html>
