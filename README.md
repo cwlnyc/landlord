@@ -16,7 +16,8 @@ reminders.
 
 ```bash
 npm install
-npm run dev        # http://localhost:4300 (npm run sim works too)
+npm run dev        # http://localhost:4300; pulls updates every 30s and restarts itself
+npm run sim        # same simulator, no auto-updating
 npm test
 npm run typecheck
 ```

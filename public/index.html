@@ -151,6 +151,8 @@ document.getElementById("reset").addEventListener("click", () => {
   if (confirm("Start over? This clears every text and repair.")) post("/api/reset");
 });
 refresh();
+// New texts (and reminders when the clock moves) show up without a click.
+setInterval(() => { if (!document.hidden) refresh(); }, 3000);
 </script>
 </body>
 </html>
