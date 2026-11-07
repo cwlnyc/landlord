@@ -42,7 +42,6 @@ let saved = load();
 const save = () => writeFileSync(STATE_FILE, JSON.stringify(saved, null, 2));
 const now = () => new Date(Date.now() + saved.clockOffsetMs);
 const BOT = "repair line";
-const NOTE = "note";
 
 function record(out: Outbound[]) {
   for (const o of out) saved.log.push({ at: now().toISOString(), from: BOT, to: o.to, body: o.body });
@@ -79,7 +78,8 @@ createServer(async (req, res) => {
     }
     saved.log.push({ at: now().toISOString(), from, to: BOT, body: text });
     const { out, understoodAs } = await receive(saved.state, from, text, now(), ai);
-    if (understoodAs) saved.log.push({ at: now().toISOString(), from: NOTE, to: from, body: `AI read this as: ${understoodAs}` });
+    // In the terminal only: the bot's reply already shows what it understood.
+    if (understoodAs) console.log(`AI read "${text}" as: ${understoodAs}`);
     record(out);
     record(tick(saved.state, now()));
     save();

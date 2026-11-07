@@ -32,7 +32,6 @@
   .msg { max-width:85%; padding:7px 11px; border-radius:16px; white-space:pre-wrap; word-wrap:break-word; }
   .msg.in { align-self:flex-start; background:var(--bot); }
   .msg.out { align-self:flex-end; background:var(--me); color:#fff; }
-  .msg.note { align-self:center; background:none; color:var(--muted); font-size:12px; font-style:italic; padding:0 4px; }
   .ai { display:inline-block; margin-left:8px; font-size:12px; padding:2px 8px; border-radius:10px; border:1px solid var(--line); }
   .msg time { display:block; font-size:11px; opacity:.6; margin-top:2px; }
   form { display:flex; gap:6px; padding:10px; border-top:1px solid var(--line); }
@@ -105,7 +104,7 @@ function render() {
       .filter((m) => digits(m.to) === me || digits(m.from) === me)
       .map((m) => {
         const el = document.createElement("div");
-        el.className = "msg " + (m.from === "note" ? "note" : digits(m.from) === me ? "out" : "in");
+        el.className = "msg " + (digits(m.from) === me ? "out" : "in");
         const card = m.body.startsWith("BEGIN:VCARD") && m.body.match(/^FN:(.*)$/m);
         const tel = m.body.match(/^TEL[^:]*:(.*)$/m);
         el.textContent = card ? `Contact card: ${card[1]}, ${tel ? tel[1] : ""}` : m.body;

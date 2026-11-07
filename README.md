@@ -81,8 +81,8 @@ reminders, still without texting the business.
 With an API key, Claude reads normal texts and turns them into the fixed
 replies: "cant tmrw, thurs after 2 ok?" becomes `11/12 2:00pm`, "ya ill be
 here" becomes `1`, "can you find another heating guy" becomes `FIND HVAC`.
-The simulator shows "AI read this as: …" under each one, so a misread is
-easy to spot. The engine still checks everything it's given, and when the
+The bot's reply shows what it understood ("Asked John about #1"), and the
+terminal running the simulator logs each AI reading for debugging. The engine still checks everything it's given, and when the
 AI isn't sure it answers nothing and the sender is asked to rephrase.
 
 Copy `.env.example` to `.env.local` and add `ANTHROPIC_API_KEY` (from the
