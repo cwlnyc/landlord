@@ -31,6 +31,8 @@ As the repair person, `tomorrow 8am`. As the tenant, `1`. Then press
 |---|---|---|
 | Tenant | anything | reports a repair |
 | Tenant | `1` / `2` | will / won't be home for the offered time |
+| Landlord | `YES` | sends the person the bot suggested (`YES 3` for #3); `NO` to pick yourself |
+| Landlord | *shares a contact card* | saves a repair person; "John handyman Hamden" gives name, trade and town |
 | Landlord | `SEND JOHN` | asks John about the newest repair (`SEND JOHN 3` for #3) |
 | Landlord | `LIST` | open repairs |
 | Landlord | `DONE 3` / `CANCEL 3` | close a repair |
@@ -43,6 +45,26 @@ As the repair person, `tomorrow 8am`. As the tenant, `1`. Then press
 
 Every landlord on the list (e.g. both parents) gets every update, and
 either can reply.
+
+### Who to send
+
+Each new repair comes with a suggestion: "heat not working" is an HVAC job,
+"sink leaking" a plumber's, a sticking door a handyman's (`src/match.ts`,
+plain keywords). It prefers someone who covers the rental's town, never
+offers a handyman for a specialist job, and skips anyone who already said
+no. The landlord answers YES and it's sent. When nobody saved fits, it says
+so and offers `FIND`.
+
+### Adding repair people
+
+Share a contact card with the repair line (iPhone: open the contact, Share
+Contact, pick the repair line). Names saved like "John handyman Hamden" are
+read as name, trade and town; otherwise the bot asks once ("PLUMBER
+HAMDEN"). A text can't read someone's whole contact list, so it's one card
+per person: a minute for the 3 to 6 people a small landlord uses. In the
+simulator, the landlord phone has a **Share a contact** button.
+
+Tell your repair people the repair line will text them before it does.
 
 ### When the usual person can't come
 

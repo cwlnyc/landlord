@@ -60,6 +60,10 @@ export type Repair = {
   reminded?: boolean;
   /** Set once the landlord was asked whether it got fixed. */
   checkedBack?: boolean;
+  /** Who the bot suggested, waiting on the landlord's YES. */
+  suggested?: string;
+  /** Repair people who already said no, so they aren't suggested again. */
+  tried?: string[];
 };
 
 export type State = {
@@ -73,6 +77,8 @@ export type State = {
   found?: Record<string, Found[]>;
   /** The repair the latest search was for, so "BOOKED 1 …" needs no id. */
   lastFound?: number;
+  /** A shared contact whose trade the bot asked about. */
+  pendingContact?: { name: string; phone: string };
 };
 
 /** A text to send. The simulator shows it; later Twilio sends it. */

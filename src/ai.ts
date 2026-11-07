@@ -50,6 +50,8 @@ const RULES: Record<HelpRequest["role"], string> = {
   ].join("\n"),
   landlord: [
     "Rewrite it as exactly one of these commands, or null if you can't tell which:",
+    "YES [repair number]  (agree to send the repair person the bot suggested)",
+    "NO [repair number]  (don't send the suggested person)",
     "SEND <CODE> [repair number]  (text that repair person, using the code exactly as listed)",
     "FIND <trade> [repair number]  (search the web for a repair person, e.g. FIND plumber 3)",
     'BOOKED <result number or CODE> <M/D h:mmam> [#repair number]  (they booked someone by phone, e.g. "BOOKED 2 11/12 9:00am")',

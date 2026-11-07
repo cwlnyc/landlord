@@ -1,3 +1,4 @@
+import { pickVendor, readContactCard, readContactName, tradeForProblem, tradeLabel } from "./match.js";
 import { formatSlot, mentionsTime, parseVisitTime } from "./parse-time.js";
 import type { Found, Outbound, Person, Repair, State, Unit, Vendor } from "./types.js";
 
@@ -23,7 +24,9 @@ import type { Found, Outbound, Person, Repair, State, Unit, Vendor } from "./typ
 const OPEN: Repair["status"][] = ["new", "asking-vendor", "asking-tenant", "confirmed"];
 const HOUR = 60 * 60 * 1000;
 
-export const LANDLORD_COMMANDS = ["SEND", "LIST", "STATUS", "DONE", "CANCEL", "FIND", "BOOKED", "HELP"];
+const YES_WORDS = ["YES", "Y", "YEP", "YEAH", "YA", "OK", "OKAY", "SURE", "K"];
+const NO_WORDS = ["NO", "N", "NOPE", "NAH"];
+export const LANDLORD_COMMANDS = ["SEND", "LIST", "STATUS", "DONE", "CANCEL", "FIND", "BOOKED", "HELP", ...YES_WORDS, ...NO_WORDS];
 
 export function digits(phone: string): string {
   return phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
@@ -70,12 +73,14 @@ function unitFrom(state: State, from: string): Unit | undefined {
 
 const HELP = [
   "Commands:",
+  "YES = send the person I suggested (YES 3 for repair #3)",
   "SEND JOHN = ask John to fix the newest repair (SEND JOHN 3 for repair #3)",
   "FIND HVAC = search for HVAC near the rental, for you to call",
   "BOOKED 1 TUE 9AM = you booked result 1 (or BOOKED JOHN TUE 9AM)",
   "LIST = open repairs",
   "DONE 3 = mark #3 fixed",
   "CANCEL 3 = drop #3",
+  "To add a repair person, share their contact card with this number.",
 ].join("\n");
 
 /** One incoming text. Returns the texts to send back out. */
@@ -103,8 +108,8 @@ export type HelpRequest = { role: Role; context: string };
 export function needsHelp(state: State, from: string, body: string, now: Date): HelpRequest | null {
   const text = body.trim();
   if (landlordOf(state, from)) {
-    const word = (text.split(/\s+/)[0] ?? "").toUpperCase();
-    if (LANDLORD_COMMANDS.includes(word)) return null;
+    const word = (text.split(/\s+/)[0] ?? "").toUpperCase().replace(/[^A-Z]/g, "");
+    if (LANDLORD_COMMANDS.includes(word) || readContactCard(text) || state.pendingContact) return null;
     const open = state.repairs.filter((r) => OPEN.includes(r.status));
     const found = state.lastFound !== undefined ? state.found?.[state.lastFound] : undefined;
     return {
@@ -180,9 +185,29 @@ function fromTenant(state: State, unit: Unit, text: string, now: Date): Outbound
     },
     ...toLandlords(
       state,
-      `New repair #${repair.id} from ${unit.tenant.name}, ${unit.address}:\n"${text}"\n\nReply SEND + who to ask: ${vendorList(state)}\nOr FIND + a trade to search nearby.`,
+      `New repair #${repair.id} from ${unit.tenant.name}, ${unit.address}:\n"${text}"\n\n${suggest(state, repair)}`,
     ),
   ];
+}
+
+/**
+ * "Send Sam (HVAC)? Reply YES" when someone fits, else how to pick or
+ * search. Remembers the suggestion so a bare YES means it.
+ */
+function suggest(state: State, repair: Repair): string {
+  const unit = unitOf(state, repair);
+  const need = tradeForProblem(repair.text);
+  const pick = pickVendor(state.vendors, repair.text, townOf(unit), repair.tried);
+  const others = textable(state).filter((v) => v.code !== pick?.code && !repair.tried?.includes(v.code));
+  const find = `FIND ${need ?? "+ a trade"} to search near ${townOf(unit)}`;
+  if (pick) {
+    repair.suggested = pick.code;
+    const alt = others.length ? `, SEND + someone else (${others.map((v) => v.code).join(", ")})` : "";
+    return `Send ${pick.name} (${pick.trade})? Reply YES${alt}, or ${find}.`;
+  }
+  delete repair.suggested;
+  const who = others.length ? `SEND + who to ask (${others.map((v) => v.code).join(", ")}), or ` : "";
+  return `${need ? `None of your saved people do ${need}. ` : ""}Reply ${who}${find}.`;
 }
 
 function tenantConfirms(state: State, repair: Repair, now: Date): Outbound[] {
@@ -278,15 +303,10 @@ function fromVendor(state: State, vendor: Vendor, raw: string, now: Date): Outbo
   if (isRefusal(text)) {
     repair.status = "new";
     delete repair.vendorCode;
-    const others = textable(state).filter((v) => v.code !== vendor.code);
+    repair.tried = [...(repair.tried ?? []), vendor.code];
     return [
       { to: vendor.phone, body: "No problem, thanks for letting us know." },
-      ...toLandlords(
-        state,
-        `${vendor.name} can't do #${repair.id} (${unit.address}).${
-          others.length ? ` Reply SEND + someone else: ${others.map((v) => v.code).join(", ")}.` : ""
-        } Or FIND ${vendor.trade.toUpperCase()} to search near ${townOf(unit)}.`,
-      ),
+      ...toLandlords(state, `${vendor.name} can't do #${repair.id} (${unit.address}). ${suggest(state, repair)}`),
     ];
   }
 
@@ -318,10 +338,55 @@ function pickRepair(state: State, id: number): Repair | undefined {
   return [...state.repairs].reverse().find((r) => r.status === "new" || r.status === "asking-vendor");
 }
 
+function sendTo(state: State, vendor: Vendor, repair: Repair): Outbound[] {
+  const unit = unitOf(state, repair);
+  repair.vendorCode = vendor.code;
+  repair.status = "asking-vendor";
+  delete repair.slot;
+  delete repair.suggested;
+  repair.reminded = false;
+  return [
+    {
+      to: vendor.phone,
+      body: `Hi ${vendor.name}, this is the repair line for ${state.landlords[0]?.name ?? "your landlord"}. Job at ${unit.address}: "${repair.text}". When can you go? Reply with a day and time like TUE 9AM, or NO if you can't.`,
+    },
+    ...toLandlords(state, `Asked ${vendor.name} about #${repair.id}. I'll text you when they reply.`),
+  ];
+}
+
 function fromLandlord(state: State, landlord: Person, text: string, now: Date): Outbound[] {
   const reply = (body: string): Outbound[] => [{ to: landlord.phone, body }];
   const [word = "", ...rest] = text.split(/\s+/);
-  const command = word.toUpperCase();
+  const command = word.toUpperCase().replace(/[^A-Z]/g, "");
+
+  const card = readContactCard(text);
+  if (card) return saveContact(state, landlord, card.name, card.phone);
+  if (/^BEGIN:VCARD/i.test(text)) return reply("I couldn't read a name and number on that contact. Try sharing it again.");
+
+  if (state.pendingContact && !LANDLORD_COMMANDS.includes(command)) {
+    const { name, phone } = state.pendingContact;
+    delete state.pendingContact;
+    const towns = state.units.map(townOf);
+    const said = readContactName(text, towns);
+    const trade = said.trade ?? text.split(/\s+/)[0]?.toLowerCase();
+    return saveContact(state, landlord, name, phone, trade, said.town ?? "all");
+  }
+
+  if (YES_WORDS.includes(command) || NO_WORDS.includes(command)) {
+    const id = idArg(rest[0]);
+    const repair = Number.isNaN(id)
+      ? [...state.repairs].reverse().find((r) => r.status === "new" && r.suggested)
+      : state.repairs.find((r) => r.id === id && r.status === "new" && r.suggested);
+    if (!repair) return reply("There's nothing waiting on a yes or no. Reply LIST to see open repairs.");
+    if (NO_WORDS.includes(command)) {
+      delete repair.suggested;
+      const unit = unitOf(state, repair);
+      return reply(`OK. Reply SEND + who to ask (${vendorList(state)}), or FIND + a trade to search near ${townOf(unit)}.`);
+    }
+    const vendor = state.vendors.find((v) => v.code === repair.suggested);
+    if (!vendor) return reply(`Who should I ask? Reply SEND + one of: ${vendorList(state)}`);
+    return sendTo(state, vendor, repair);
+  }
 
   if (command === "SEND") {
     const code = (rest[0] ?? "").toUpperCase();
@@ -332,18 +397,7 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
       ? [...state.repairs].reverse().find((r) => r.status === "new")
       : state.repairs.find((r) => r.id === id && OPEN.includes(r.status));
     if (!repair) return reply(Number.isNaN(id) ? "No new repairs waiting. Reply LIST to see open ones." : `There's no open repair #${id}.`);
-    const unit = unitOf(state, repair);
-    repair.vendorCode = vendor.code;
-    repair.status = "asking-vendor";
-    delete repair.slot;
-    repair.reminded = false;
-    return [
-      {
-        to: vendor.phone,
-        body: `Hi ${vendor.name}, this is the repair line for ${state.landlords[0]?.name ?? "your landlord"}. Job at ${unit.address}: "${repair.text}". When can you go? Reply with a day and time like TUE 9AM, or NO if you can't.`,
-      },
-      ...toLandlords(state, `Asked ${vendor.name} about #${repair.id}. I'll text you when they reply.`),
-    ];
+    return sendTo(state, vendor, repair);
   }
 
   if (command === "BOOKED") return booked(state, landlord, rest.join(" "), now);
@@ -369,6 +423,45 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
   }
 
   return reply(HELP);
+}
+
+/* --------------------------- contacts --------------------------- */
+
+/**
+ * A repair person shared as a contact card. Mom saves them as
+ * "John handyman Hamden", so the name usually carries the trade and town;
+ * when it doesn't, the bot asks once.
+ */
+function saveContact(
+  state: State,
+  landlord: Person,
+  fullName: string,
+  phone: string,
+  trade?: string,
+  town?: string,
+): Outbound[] {
+  const reply = (body: string): Outbound[] => [{ to: landlord.phone, body }];
+  if (state.landlords.some((l) => same(l.phone, phone)) || state.units.some((u) => same(u.tenant.phone, phone))) {
+    return reply(`${fullName} is already a landlord or tenant here, so I didn't add them as a repair person.`);
+  }
+  const said = readContactName(fullName, state.units.map(townOf));
+  const finalTrade = trade ?? said.trade;
+  if (!finalTrade) {
+    state.pendingContact = { name: said.name, phone };
+    return reply(`Got ${said.name}'s number. What do they do, and where? Reply like: PLUMBER HAMDEN, or HANDYMAN ALL.`);
+  }
+  const label = tradeLabel(finalTrade) ?? finalTrade;
+  const where = town ?? said.town ?? "all";
+  const existing = state.vendors.find((v) => same(v.phone, phone));
+  if (existing) {
+    Object.assign(existing, { name: said.name, trade: label, town: where, textable: true });
+    return reply(`Updated ${existing.name}: ${label}, ${where === "all" ? "all towns" : where} (code ${existing.code}).`);
+  }
+  const vendor: Vendor = { code: codeFor(state, said.name), name: said.name, trade: label, town: where, phone };
+  state.vendors.push(vendor);
+  return reply(
+    `Saved ${vendor.name}: ${label}, ${where === "all" ? "all towns" : where} (code ${vendor.code}). I'll suggest them for ${label} jobs. Share another contact, or you're all set.`,
+  );
 }
 
 /* ------------------------- find and booked ------------------------- */
@@ -479,7 +572,9 @@ function describe(state: State, r: Repair): string {
   const where = `#${r.id} ${unit.address}: "${r.text}"`;
   switch (r.status) {
     case "new":
-      return `${where} - nobody booked yet`;
+      return r.suggested
+        ? `${where} - suggested ${state.vendors.find((v) => v.code === r.suggested)?.name}, waiting on your YES`
+        : `${where} - nobody booked yet`;
     case "asking-vendor":
       return `${where} - waiting on ${who}`;
     case "asking-tenant":

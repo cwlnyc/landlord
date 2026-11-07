@@ -57,7 +57,7 @@
 <main>
   <section class="phone" data-role="landlord">
     <h2>Landlord</h2><select></select>
-    <div class="hint">Try: SEND HVAC, FIND HVAC, BOOKED 1 TOMORROW 8AM, LIST</div>
+    <div class="hint">Try: YES, SEND JOHN, FIND HVAC, BOOKED 1 TOMORROW 8AM, LIST <button type="button" id="share">Share a contact</button></div>
     <div class="thread"></div>
     <form><input placeholder="Text the repair line" autocomplete="off"><button class="primary">Send</button></form>
   </section>
@@ -106,7 +106,9 @@ function render() {
       .map((m) => {
         const el = document.createElement("div");
         el.className = "msg " + (m.from === "note" ? "note" : digits(m.from) === me ? "out" : "in");
-        el.textContent = m.body;
+        const card = m.body.startsWith("BEGIN:VCARD") && m.body.match(/^FN:(.*)$/m);
+        const tel = m.body.match(/^TEL[^:]*:(.*)$/m);
+        el.textContent = card ? `Contact card: ${card[1]}, ${tel ? tel[1] : ""}` : m.body;
         const t = document.createElement("time");
         t.textContent = fmt(m.at);
         el.append(t);
@@ -137,6 +139,15 @@ for (const phone of document.querySelectorAll(".phone")) {
 for (const b of document.querySelectorAll("[data-hours]")) {
   b.addEventListener("click", () => post("/api/clock", { hours: Number(b.dataset.hours) }));
 }
+// Like tapping Share Contact on an iPhone: sends a vCard to the repair line.
+document.getElementById("share").addEventListener("click", () => {
+  const name = prompt('Contact name, saved like Mom does (e.g. "Mike plumber Hamden"):');
+  if (!name) return;
+  const phone = prompt("Their phone number:", "+1 203 555 0" + Math.floor(400 + Math.random() * 500));
+  if (!phone) return;
+  const from = document.querySelector('.phone[data-role=landlord] select').value;
+  post("/api/text", { from, text: `BEGIN:VCARD\nVERSION:3.0\nFN:${name}\nTEL;type=CELL:${phone}\nEND:VCARD` });
+});
 document.getElementById("reset").addEventListener("click", () => {
   if (confirm("Start over? This clears every text and repair.")) post("/api/reset");
 });
