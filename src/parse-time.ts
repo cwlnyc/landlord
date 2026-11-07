@@ -51,8 +51,18 @@ function readDay(text: string, now: Date): Date | null | "none" {
   return "none";
 }
 
+const DAY_WORDS = /\b(today|tomorrow|tmrw|tmr|tomorow|sun|mon|tue|wed|thu|fri|sat)[a-z]*\b|\b\d{1,2}\/\d{1,2}\b/g;
+
+/** Whether a text talks about a day or a time at all ("cant tmrw" does). */
+export function mentionsTime(input: string): boolean {
+  const text = input.toLowerCase();
+  return /\b(today|tomorrow|tmrw|tmr|tomorow|noon|morning|afternoon|evening)\b|\b(sun|mon|tue|wed|thu|fri|sat)[a-z]*\b|\b\d{1,2}(:\d{2})?\s*(am|pm)\b|\b\d{1,2}\/\d{1,2}\b/.test(text);
+}
+
 export function parseVisitTime(input: string, now: Date): Date | null {
   const text = input.toLowerCase();
+  // "cant tmrw, thurs ok" names two days: too risky to pick one.
+  if ((text.match(DAY_WORDS) ?? []).length > 1) return null;
   const day = readDay(text, now);
   if (day === null) return null;
   // Strip the date so "11/12" isn't read as a clock time.

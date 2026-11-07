@@ -37,8 +37,35 @@ As the repair person, `tomorrow 8am`. As the tenant, `1`. Then press
 | Repair person | `TUE 9AM`, `tomorrow 2pm`, `11/12 10am` | offers a time |
 | Repair person | `NO` | can't do it; goes back to the landlord |
 
+| Landlord | `FIND HVAC` | searches the web for HVAC near the rental, lists 3 to call |
+| Landlord | `BOOKED 1 TOMORROW 8AM` | you called result 1 and agreed a time; checks with the tenant |
+| Landlord | `BOOKED JOHN TUE 9AM` | same, for someone already saved |
+
 Every landlord on the list (e.g. both parents) gets every update, and
 either can reply.
+
+### When the usual person can't come
+
+When a repair person replies NO, the landlord is offered `FIND` + their
+trade. The bot searches the web for up to 3 local businesses (best rated,
+most reviews, 24/7 if it sounds urgent) and texts back names and numbers.
+**The landlord calls them; the bot never texts a business it found.** Many
+business numbers are landlines, and they never agreed to texts. After the
+call, `BOOKED 1 …` saves them and runs the usual tenant check and
+reminders, still without texting the business.
+
+### Messy texts (AI)
+
+With an API key, Claude reads normal texts and turns them into the fixed
+replies: "cant tmrw, thurs after 2 ok?" becomes `11/12 2:00pm`, "ya ill be
+here" becomes `1`, "can you find another heating guy" becomes `FIND HVAC`.
+The simulator shows "AI read this as: …" under each one, so a misread is
+easy to spot. The engine still checks everything it's given, and when the
+AI isn't sure it answers nothing and the sender is asked to rephrase.
+
+Copy `.env.example` to `.env.local` and add `ANTHROPIC_API_KEY` (from the
+Claude Console, not a claude.ai subscription). Without a key the AI is off,
+fixed replies still work, and `FIND` shows sample results marked as such.
 
 ### Your own rentals
 
@@ -49,7 +76,10 @@ never get committed. Delete `data/state.json` to start the simulator over.
 ## Layout
 
 ```
-src/engine.ts      the whole flow: handleText() for each text in, tick() as time passes
+src/engine.ts      the whole flow: handleText() for each text in, tick() as time passes,
+                   needsHelp/planFind/showFound around the AI and the search
+src/interpret.ts   receive(): one text start to finish, AI and search included
+src/ai.ts          Claude: understand messy texts; web search for repair people
 src/parse-time.ts  reads "tue 9am" style times; returns null rather than guess
 src/server.ts      the simulator's local server and fake clock
 public/index.html  the three-phone page
@@ -64,7 +94,4 @@ behind a Twilio webhook later.
 - **Real texting (Twilio).** Needs an adult's account, a paid number and
   US business-texting (A2P 10DLC) registration. Tenants and repair people
   must agree to get texts and be able to reply STOP.
-- **Understanding messy texts (Claude API).** v0 asks for a fixed format
-  instead of guessing. Add a small model once real messages show what
-  people actually type, and always confirm what it read before saving.
 - **Setup by text.** For now, units and repair people come from the JSON file.

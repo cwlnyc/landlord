@@ -5,7 +5,21 @@ export type Person = { name: string; phone: string };
 export type Unit = {
   id: string;
   address: string;
+  /** Where to search for repair people. Read from the address if missing. */
+  town?: string;
   tenant: Person;
+};
+
+/** A business the search turned up, for the landlord to call. */
+export type Found = {
+  name: string;
+  phone: string;
+  rating?: number | null;
+  reviews?: number | null;
+  /** Short and useful: "open 24 hours", "emergency service". */
+  note?: string | null;
+  /** The trade searched for; set when results are saved. */
+  trade?: string;
 };
 
 /**
@@ -18,6 +32,11 @@ export type Vendor = {
   trade: string;
   town: string;
   phone: string;
+  /**
+   * False for a business found by search and booked by phone: it never
+   * signed up for texts and may be a landline, so the bot never texts it.
+   */
+  textable?: boolean;
 };
 
 export type RepairStatus =
@@ -50,6 +69,10 @@ export type State = {
   vendors: Vendor[];
   repairs: Repair[];
   nextId: number;
+  /** Search results per repair id, numbered as the landlord saw them. */
+  found?: Record<string, Found[]>;
+  /** The repair the latest search was for, so "BOOKED 1 …" needs no id. */
+  lastFound?: number;
 };
 
 /** A text to send. The simulator shows it; later Twilio sends it. */

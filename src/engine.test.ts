@@ -82,6 +82,16 @@ describe("when things go sideways", () => {
     expect(s.repairs[0]!.status).toBe("asking-vendor");
   });
 
+  it("a 'no' that offers another day is not a refusal, and is never guessed", () => {
+    const s = fresh();
+    handleText(s, MARIA, "sink leaking", SUNDAY_9PM);
+    handleText(s, MOM, "SEND JOHN", SUNDAY_9PM);
+    const out = handleText(s, JOHN, "cant tmrw, thurs after 2 ok?", SUNDAY_9PM);
+    expect(s.repairs[0]!.status).toBe("asking-vendor");
+    expect(s.repairs[0]!.vendorCode).toBe("JOHN");
+    expect(to(out, JOHN)[0]).toMatch(/didn't catch the time/);
+  });
+
   it("reads a bare '9 am' as a time, not repair #9", () => {
     const s = fresh();
     s.nextId = 9;
@@ -89,6 +99,17 @@ describe("when things go sideways", () => {
     handleText(s, MOM, "SEND JOHN", SUNDAY_9PM);
     handleText(s, JOHN, "9 am", SUNDAY_9PM);
     expect(s.repairs[0]!.status).toBe("asking-tenant");
+  });
+
+  it("a visit 20 hours away: the confirmation is the reminder, nothing after", () => {
+    const s = fresh();
+    const noon = new Date(2026, 10, 8, 12, 0);
+    handleText(s, MARIA, "sink leaking", noon);
+    handleText(s, MOM, "SEND JOHN", noon);
+    handleText(s, JOHN, "tomorrow 8am", noon);
+    const confirm = handleText(s, MARIA, "1", noon);
+    expect(to(confirm, MARIA)[0]).not.toMatch(/remind you/);
+    expect(tick(s, noon)).toEqual([]);
   });
 
   it("a visit days away gets one reminder the day before", () => {

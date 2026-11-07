@@ -32,6 +32,8 @@
   .msg { max-width:85%; padding:7px 11px; border-radius:16px; white-space:pre-wrap; word-wrap:break-word; }
   .msg.in { align-self:flex-start; background:var(--bot); }
   .msg.out { align-self:flex-end; background:var(--me); color:#fff; }
+  .msg.note { align-self:center; background:none; color:var(--muted); font-size:12px; font-style:italic; padding:0 4px; }
+  .ai { display:inline-block; margin-left:8px; font-size:12px; padding:2px 8px; border-radius:10px; border:1px solid var(--line); }
   .msg time { display:block; font-size:11px; opacity:.6; margin-top:2px; }
   form { display:flex; gap:6px; padding:10px; border-top:1px solid var(--line); }
   form input { flex:1; font:inherit; padding:8px 12px; border-radius:18px; border:1px solid var(--line);
@@ -43,7 +45,7 @@
 <header>
   <div>
     <h1>Repair line simulator</h1>
-    <div class="clock" id="clock"></div>
+    <div class="clock"><span id="clock"></span><span class="ai" id="ai"></span></div>
   </div>
   <div class="bar">
     <button data-hours="1">+1 hour</button>
@@ -55,7 +57,7 @@
 <main>
   <section class="phone" data-role="landlord">
     <h2>Landlord</h2><select></select>
-    <div class="hint">Try: SEND HVAC, LIST, DONE 1</div>
+    <div class="hint">Try: SEND HVAC, FIND HVAC, BOOKED 1 TOMORROW 8AM, LIST</div>
     <div class="thread"></div>
     <form><input placeholder="Text the repair line" autocomplete="off"><button class="primary">Send</button></form>
   </section>
@@ -83,11 +85,13 @@ function people(role) {
 }
 
 function fmt(iso) {
-  return new Date(iso).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  // The rentals are in Connecticut; show their time whatever this computer's is.
+  return new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 function render() {
   document.getElementById("clock").textContent = "Simulated time: " + fmt(data.now);
+  document.getElementById("ai").textContent = data.ai ? "AI on" : "AI off: sample search results";
   for (const phone of document.querySelectorAll(".phone")) {
     const select = phone.querySelector("select");
     const list = people(phone.dataset.role);
@@ -101,7 +105,7 @@ function render() {
       .filter((m) => digits(m.to) === me || digits(m.from) === me)
       .map((m) => {
         const el = document.createElement("div");
-        el.className = "msg " + (digits(m.from) === me ? "out" : "in");
+        el.className = "msg " + (m.from === "note" ? "note" : digits(m.from) === me ? "out" : "in");
         el.textContent = m.body;
         const t = document.createElement("time");
         t.textContent = fmt(m.at);

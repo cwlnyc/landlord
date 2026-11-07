@@ -19,6 +19,6 @@ it.each([
   expect(read(input)).toBe(expected);
 });
 
-it.each(["sometime this week", "tuesday", "yes", "today 8am"])("%s -> asks again", (input) => {
+it.each(["sometime this week", "tuesday", "yes", "today 8am", "cant tmrw, thurs after 2"])("%s -> asks again", (input) => {
   expect(read(input)).toBeNull();
 });

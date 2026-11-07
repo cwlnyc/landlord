@@ -1,6 +1,8 @@
 import { createServer } from "node:http";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { handleText, tick } from "./engine.js";
+import { makeAi } from "./ai.js";
+import { tick } from "./engine.js";
+import { receive } from "./interpret.js";
 import type { Outbound, State } from "./types.js";
 
 /**
@@ -11,6 +13,14 @@ import type { Outbound, State } from "./types.js";
  * Starts from data/real.json if it exists (gitignored, for your own
  * rentals), else data/example.json.
  */
+
+// Keys live in .env.local (gitignored), never in the code.
+try {
+  process.loadEnvFile(new URL("../.env.local", import.meta.url));
+} catch {
+  // No .env.local: the AI stays off and FIND returns sample results.
+}
+const ai = makeAi();
 
 const PORT = Number(process.env.PORT ?? 4300);
 const STATE_FILE = new URL("../data/state.json", import.meta.url);
@@ -32,6 +42,7 @@ let saved = load();
 const save = () => writeFileSync(STATE_FILE, JSON.stringify(saved, null, 2));
 const now = () => new Date(Date.now() + saved.clockOffsetMs);
 const BOT = "repair line";
+const NOTE = "note";
 
 function record(out: Outbound[]) {
   for (const o of out) saved.log.push({ at: now().toISOString(), from: BOT, to: o.to, body: o.body });
@@ -59,7 +70,7 @@ createServer(async (req, res) => {
     return;
   }
   if (req.method === "GET" && req.url === "/api/state") {
-    return json({ ...saved, now: now().toISOString() });
+    return json({ ...saved, now: now().toISOString(), ai: ai.live });
   }
   if (req.method === "POST" && req.url === "/api/text") {
     const { from, text } = await body(req);
@@ -67,7 +78,9 @@ createServer(async (req, res) => {
       return json({ error: "from and text are required" }, 400);
     }
     saved.log.push({ at: now().toISOString(), from, to: BOT, body: text });
-    record(handleText(saved.state, from, text, now()));
+    const { out, understoodAs } = await receive(saved.state, from, text, now(), ai);
+    if (understoodAs) saved.log.push({ at: now().toISOString(), from: NOTE, to: from, body: `AI read this as: ${understoodAs}` });
+    record(out);
     record(tick(saved.state, now()));
     save();
     return json({ ok: true });
@@ -88,4 +101,5 @@ createServer(async (req, res) => {
 }).listen(PORT, () => {
   console.log(`Repair line simulator: http://localhost:${PORT}`);
   console.log(`Data from ${SEED_FILE.pathname.split("/").slice(-2).join("/")}`);
+  console.log(ai.live ? "AI on (Claude API)" : "AI off: add ANTHROPIC_API_KEY to .env.local. FIND shows sample results.");
 });
