@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "TZ=America/New_York tsx src/server.ts",
     "sim": "TZ=America/New_York tsx src/server.ts",
     "test": "TZ=America/New_York vitest run",
     "typecheck": "tsc --noEmit"

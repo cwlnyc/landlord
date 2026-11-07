@@ -16,7 +16,7 @@ reminders.
 
 ```bash
 npm install
-npm run sim        # http://localhost:4300
+npm run dev        # http://localhost:4300 (npm run sim works too)
 npm test
 npm run typecheck
 ```
