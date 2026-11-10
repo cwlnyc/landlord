@@ -11,3 +11,5 @@ See README.md for what this is and how to run it. Rules that matter when changin
 - Times are local to America/New_York: `npm run sim` and `npm test` set `TZ`. Don't remove that from the scripts.
 - Real phone numbers live only in `data/real.json` and `data/state.json`, both gitignored. Never commit them, never put them in tests.
 - Run `npm test` and `npm run typecheck` before committing.
+- `npm run live` sends real texts. Never weaken its Twilio signature check, its "only text known numbers" rule, or the STOP/HELP keyword pass-through. Never run it from tests.
+- Twilio credentials live only in `.env.local`. Never commit or print them.

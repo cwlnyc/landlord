@@ -96,6 +96,48 @@ Copy `data/example.json` to `data/real.json` and fill in real units,
 tenants and repair people. `real.json` is gitignored so real phone numbers
 never get committed. Delete `data/state.json` to start the simulator over.
 
+## Going live: a real phone number
+
+`npm run live` is the real repair line: the same engine, with texts coming
+in from Twilio and real texts going out. The simulator (`npm run dev`) never
+texts anyone; `live` does.
+
+**1. Twilio (an adult's account).** At twilio.com, sign up, buy a local
+number with SMS, and copy the Account SID and Auth Token.
+
+**2. Register for business texting (A2P 10DLC).** In the Twilio console:
+Messaging, Regulatory Compliance. A sole-proprietor registration is enough
+for a family's rentals. US carriers block unregistered business texts, and
+approval can take days to a couple of weeks, so start it first. Until then
+a trial account can usually text only numbers verified in the console.
+
+**3. Real data.** Copy `data/example.json` to `data/real.json` with the real
+units, tenants and repair people (gitignored). Tell everyone on it the
+repair line will text them; they can reply STOP at any time.
+
+**4. A public address.** Twilio has to reach your computer. For testing,
+a free Cloudflare tunnel (`brew install cloudflared`, then
+`cloudflared tunnel --url http://localhost:4301`) prints a
+`https://….trycloudflare.com` address. It changes each time it starts, and
+the line is off whenever the computer sleeps: fine for testing, not for a
+furnace at 9pm. Real use needs an always-on host.
+
+**5. Settings.** Fill in the Twilio lines of `.env.local` (see
+`.env.example`), with `PUBLIC_URL` set to the tunnel address and, at first,
+`ALLOW_ONLY` set to your own family's numbers.
+
+**6. Run it.** `npm run live`. It prints the webhook address; in Twilio,
+open the number, and under "A message comes in" choose Webhook, paste that
+address, HTTP POST, and save. Text the number.
+
+What `live` does to stay safe:
+- Rejects any request not signed by Twilio, so nobody else can make the
+  line send texts.
+- Only ever texts numbers in its own data: landlords, tenants and repair
+  people saved as textable. Businesses found by FIND are never texted.
+- Leaves STOP, START, HELP and the other carrier keywords to Twilio.
+- `ALLOW_ONLY` logs every other text instead of sending it.
+
 ## Layout
 
 ```
@@ -103,6 +145,8 @@ src/engine.ts      the whole flow: handleText() for each text in, tick() as time
                    needsHelp/planFind/showFound around the AI and the search
 src/interpret.ts   receive(): one text start to finish, AI and search included
 src/ai.ts          Claude: understand messy texts; web search for repair people
+src/live.ts        the real line: Twilio webhook in, real texts out, reminders every minute
+src/twilio.ts      signature check, reading a text (and shared contact cards), sending
 src/parse-time.ts  reads "tue 9am" style times; returns null rather than guess
 src/server.ts      the simulator's local server and fake clock
 public/index.html  the three-phone page
@@ -114,7 +158,6 @@ behind a Twilio webhook later.
 
 ## Not built yet, on purpose
 
-- **Real texting (Twilio).** Needs an adult's account, a paid number and
-  US business-texting (A2P 10DLC) registration. Tenants and repair people
-  must agree to get texts and be able to reply STOP.
+- **An always-on host** for `npm run live`, so the line works when the
+  computer is asleep.
 - **Setup by text.** For now, units and repair people come from the JSON file.

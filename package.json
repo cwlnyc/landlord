@@ -6,7 +6,8 @@
     "dev": "node scripts/dev.mjs",
     "sim": "TZ=America/New_York tsx src/server.ts",
     "test": "TZ=America/New_York vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "live": "TZ=America/New_York tsx src/live.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
