@@ -164,6 +164,21 @@ function needsHelpWithout(state: State, from: string, body: string, now: Date): 
   return null;
 }
 
+/**
+ * Whether an AI's rewrite of a text is one the line can act on: a real
+ * landlord command, a time it can read or a NO from a repair person, a 1 or 2
+ * from a tenant. A cheap model's answer that fails this goes to the strong one.
+ */
+export function usableReply(role: Role, command: string, now: Date): boolean {
+  const text = command.trim();
+  if (role === "landlord") {
+    const word = (text.split(/\s+/)[0] ?? "").toUpperCase().replace(/[^A-Z]/g, "");
+    return LANDLORD_COMMANDS.includes(word);
+  }
+  if (role === "vendor") return isRefusal(text) || parseVisitTime(text.replace(/^#\d+\s+/, ""), now) !== null;
+  return /^[12]$/.test(text);
+}
+
 /* ------------------------------ tenant ------------------------------ */
 
 function isYes(text: string) {

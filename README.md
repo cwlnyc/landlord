@@ -118,6 +118,26 @@ Each text goes out once per unit per month. Timings live in
 In the simulator, **+1 week** steps through every hour, so reminders fire on
 their day. Tell tenants about the reminders before turning them on.
 
+### Which model, and what it costs
+
+`src/router.ts` uses the cheapest model that gets each job right:
+
+- **Haiku** reads texts and picks trades first (about 1/40th of Opus's
+  price). Its answer is kept only if it says it's sure *and* the answer
+  checks out: a real command, a time the line can read, a 1 or 2.
+- **Opus** answers when Haiku isn't sure, its answer doesn't check out,
+  or the call fails.
+- **It learns per kind of job.** When Haiku has been overruled on most of
+  the last 20 of a job (say, repair people's replies), that job goes straight
+  to Opus, with Haiku still tried every 10th time in case it improves.
+- **Sonnet** runs web searches (the cheapest model with the newest search
+  tool); if it finds nothing, Opus tries once.
+
+The terminal logs each call's model, cost and a running total, e.g.
+`AI read vendor text: claude-haiku-5-5 $0.0002 · total $0.03`. Models are
+set in `.env.local` (see `.env.example`); `REPAIR_MODEL` puts every job on
+one model.
+
 ### Your own rentals
 
 Copy `data/example.json` to `data/real.json` and fill in real units,
