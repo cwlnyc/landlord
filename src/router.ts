@@ -10,6 +10,14 @@
  * overruled. When that's most of the time, it stops trying the cheap model
  * for that job (saving the wasted call and the wait), but still tries it
  * now and then in case it does better.
+ *
+ * Spot checks: a small model can be sure and wrong in a way no check
+ * catches ("can't do Thursday, Friday 2pm works" read as Thursday 2pm).
+ * So some answers the cheap model is sure about are also given to the
+ * strong model: every one for a job's first few, then about 1 in 20. If
+ * they disagree, the strong answer is used for that message and the cheap
+ * one counts as wrong. That makes the learning measure real accuracy,
+ * not the cheap model's opinion of itself.
  */
 
 export type Attempt<T> = {
@@ -27,10 +35,16 @@ export type RouterOptions = {
   maxFailRate?: number;
   /** While skipping cheap, still try it every this many calls. */
   exploreEvery?: number;
+  /** Share of sure cheap answers double-checked by the strong model. */
+  spotCheckRate?: number;
+  /** Per job, double-check this many of the cheap model's first sure answers. */
+  spotCheckFirst?: number;
+  /** For tests: a stand-in for Math.random. */
+  random?: () => number;
   log?: (line: string) => void;
 };
 
-type Stats = { recent: boolean[]; calls: number };
+type Stats = { recent: boolean[]; calls: number; checked: number; disagreed: number; accepted: number };
 
 export class ModelRouter {
   private stats = new Map<string, Stats>();
@@ -38,7 +52,16 @@ export class ModelRouter {
   private opts: Required<RouterOptions>;
 
   constructor(opts: RouterOptions = {}) {
-    this.opts = { window: 20, maxFailRate: 0.6, exploreEvery: 10, log: () => {}, ...opts };
+    this.opts = {
+      window: 20,
+      maxFailRate: 0.6,
+      exploreEvery: 10,
+      spotCheckRate: 0.05,
+      spotCheckFirst: 10,
+      random: Math.random,
+      log: () => {},
+      ...opts,
+    };
   }
 
   /** Share of the recent cheap tries for this job that were overruled. */
@@ -56,16 +79,28 @@ export class ModelRouter {
     return (s.calls + 1) % this.opts.exploreEvery !== 0;
   }
 
+  /** How the spot checks have gone for a job: checked, and how many disagreed. */
+  spotChecks(key: string): { checked: number; disagreed: number } {
+    const s = this.stats.get(key);
+    return { checked: s?.checked ?? 0, disagreed: s?.disagreed ?? 0 };
+  }
+
   async run<T>(
     key: string,
     cheap: () => Promise<Attempt<T>>,
     strong: () => Promise<Attempt<T>>,
     good: (value: T | null) => boolean,
+    /** Whether two answers mean the same thing ("2pm" and "2:00pm"). */
+    same: (a: T | null, b: T | null) => boolean = (a, b) => a === b,
   ): Promise<T | null> {
-    const s = this.stats.get(key) ?? { recent: [], calls: 0 };
+    const s = this.stats.get(key) ?? { recent: [], calls: 0, checked: 0, disagreed: 0, accepted: 0 };
     this.stats.set(key, s);
     const skip = this.skipsCheap(key);
     s.calls++;
+    const remember = (ok: boolean) => {
+      s.recent.push(ok);
+      if (s.recent.length > this.opts.window) s.recent.shift();
+    };
 
     if (!skip) {
       let a: Attempt<T> | null = null;
@@ -76,12 +111,36 @@ export class ModelRouter {
       }
       if (a) this.add(a.costUsd);
       const ok = !!a && a.sure && good(a.value);
-      s.recent.push(ok);
-      if (s.recent.length > this.opts.window) s.recent.shift();
       if (a && ok) {
-        this.opts.log(`AI ${key}: ${a.model} $${a.costUsd.toFixed(4)} · total $${this.totalUsd.toFixed(2)}`);
-        return a.value;
+        s.accepted++;
+        const check = s.accepted <= this.opts.spotCheckFirst || this.opts.random() < this.opts.spotCheckRate;
+        if (!check) {
+          remember(true);
+          this.opts.log(`AI ${key}: ${a.model} $${a.costUsd.toFixed(4)} · total $${this.totalUsd.toFixed(2)}`);
+          return a.value;
+        }
+        // Spot check: the strong model answers too, and wins if they differ.
+        let b: Attempt<T> | null = null;
+        try {
+          b = await strong();
+        } catch {
+          // Can't check this time; the cheap answer stands, unjudged.
+        }
+        if (!b) {
+          remember(true);
+          return a.value;
+        }
+        this.add(b.costUsd);
+        s.checked++;
+        const agree = same(a.value, b.value) || !good(b.value);
+        if (!agree) s.disagreed++;
+        remember(agree);
+        this.opts.log(
+          `AI ${key}: spot check ${agree ? "agreed" : `DISAGREED (${a.model} said ${JSON.stringify(a.value)}, ${b.model} said ${JSON.stringify(b.value)}; using ${b.model}'s)`} · ${s.disagreed} of ${s.checked} checks disagreed · $${(a.costUsd + b.costUsd).toFixed(4)} · total $${this.totalUsd.toFixed(2)}`,
+        );
+        return agree ? a.value : b.value;
       }
+      remember(false);
     }
 
     const b = await strong();

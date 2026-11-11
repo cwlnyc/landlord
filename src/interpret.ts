@@ -1,6 +1,6 @@
 import type { Ai } from "./ai.js";
 import { handleKeyword, prepareOutbound } from "./compliance.js";
-import { LANDLORD_COMMANDS, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, usableReply } from "./engine.js";
+import { LANDLORD_COMMANDS, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, sameReply, usableReply } from "./engine.js";
 import { tradeForProblem } from "./match.js";
 import type { Outbound, State } from "./types.js";
 
@@ -75,7 +75,7 @@ async function respond(
   const help = search ? null : needsHelp(state, from, text, now);
   if (help && ai.understand) {
     try {
-      const command = await ai.understand({ ...help, text, now, valid: (c) => usableReply(help.role, c, now) });
+      const command = await ai.understand({ ...help, text, now, valid: (c) => usableReply(help.role, c, now), same: (a, b) => sameReply(help.role, a, b, now) });
       if (command) {
         text = command;
         understoodAs = command;

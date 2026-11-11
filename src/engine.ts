@@ -179,6 +179,19 @@ export function usableReply(role: Role, command: string, now: Date): boolean {
   return /^[12]$/.test(text);
 }
 
+/** Whether two rewrites mean the same thing: same time, same command words. */
+export function sameReply(role: Role, a: string, b: string, now: Date): boolean {
+  const norm = (t: string) => t.replace(/#/g, "").trim().toUpperCase().replace(/\s+/g, " ");
+  if (norm(a) === norm(b)) return true;
+  if (role === "vendor") {
+    if (isRefusal(a) && isRefusal(b)) return true;
+    const ta = parseVisitTime(a.replace(/^#\d+\s+/, ""), now);
+    const tb = parseVisitTime(b.replace(/^#\d+\s+/, ""), now);
+    return !!ta && !!tb && ta.getTime() === tb.getTime();
+  }
+  return false;
+}
+
 /* ------------------------------ tenant ------------------------------ */
 
 function isYes(text: string) {

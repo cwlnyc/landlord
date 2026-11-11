@@ -127,9 +127,15 @@ their day. Tell tenants about the reminders before turning them on.
   checks out: a real command, a time the line can read, a 1 or 2.
 - **Opus** answers when Haiku isn't sure, its answer doesn't check out,
   or the call fails.
-- **It learns per kind of job.** When Haiku has been overruled on most of
-  the last 20 of a job (say, repair people's replies), that job goes straight
-  to Opus, with Haiku still tried every 10th time in case it improves.
+- **Spot checks.** A small model can be sure *and* wrong in a way no check
+  catches ("can't do Thursday, Friday 2pm works" read as Thursday 2pm). So
+  Opus double-checks every one of a job's first 10 sure Haiku answers, then
+  about 1 in 20. When they disagree, Opus's answer is used for that message
+  and Haiku's counts as wrong. Costs pennies a month per landlord.
+- **It learns per kind of job**, from real results: when Haiku has been
+  overruled (unsure, failed a check, or lost a spot check) on most of the
+  last 20 of a job, that job goes straight to Opus, with Haiku still tried
+  every 10th time in case it improves.
 - **Sonnet** runs web searches (the cheapest model with the newest search
   tool); if it finds nothing, Opus tries once.
 

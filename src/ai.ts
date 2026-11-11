@@ -29,6 +29,8 @@ export type Understand = (
     now: Date;
     /** Whether an answer is one the line can act on; a cheap answer that isn't goes to the strong model. */
     valid?: (command: string) => boolean;
+    /** Whether two answers mean the same ("11/12 2pm" and "11/12 2:00pm"), for spot checks. */
+    same?: (a: string, b: string) => boolean;
   },
 ) => Promise<string | null>;
 export type Finder = (plan: FindPlan) => Promise<Found[]>;
@@ -104,7 +106,7 @@ const UNDERSTAND_SYSTEM =
   "You read text messages sent to a landlord's repair line and turn each one into the exact short reply the system understands. Read each message as a reply to the last text the line sent that person, when it fits: a one-word answer to a question means that question's answer. Never invent details the message doesn't say: when unsure, answer null and the person will be asked to rephrase.";
 
 function claudeUnderstand(client: Anthropic, router: ModelRouter): Understand {
-  return async ({ role, context, text, now, valid }) => {
+  return async ({ role, context, text, now, valid, same }) => {
     const prompt = `The sender is a ${role}.\n${context}\n${calendar(now)}\n\n${RULES[role]}\n\nTheir message:\n<message>${text}</message>`;
     const ask = async (model: string, cheap: boolean) => {
       const schema = cheap ? z.object({ command: z.string().nullable(), ...sureField }) : z.object({ command: z.string().nullable() });
@@ -130,6 +132,7 @@ function claudeUnderstand(client: Anthropic, router: ModelRouter): Understand {
       () => ask(CHEAP, CHEAP !== STRONG),
       () => ask(STRONG, false),
       (command) => command !== null && (!valid || valid(command)),
+      (a, b) => a === b || (a !== null && b !== null && !!same?.(a, b)),
     );
   };
 }
