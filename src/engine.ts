@@ -1,5 +1,6 @@
 import { pickVendor, readContactCard, readContactName, tradeForProblem, tradeLabel } from "./match.js";
 import { formatSlot, mentionsTime, parseVisitTime } from "./parse-time.js";
+import { isRentText, landlordPaid, rentStatus, tenantRentText, tickRent } from "./rent.js";
 import type { Found, Outbound, Person, Repair, State, Unit, Vendor } from "./types.js";
 
 /**
@@ -26,7 +27,7 @@ const HOUR = 60 * 60 * 1000;
 
 const YES_WORDS = ["YES", "Y", "YEP", "YEAH", "YA", "OK", "OKAY", "SURE", "K"];
 const NO_WORDS = ["NO", "N", "NOPE", "NAH"];
-export const LANDLORD_COMMANDS = ["SEND", "LIST", "STATUS", "DONE", "CANCEL", "FIND", "BOOKED", "HELP", ...YES_WORDS, ...NO_WORDS];
+export const LANDLORD_COMMANDS = ["SEND", "LIST", "STATUS", "DONE", "CANCEL", "FIND", "BOOKED", "HELP", "PAID", "RENT", ...YES_WORDS, ...NO_WORDS];
 
 export function digits(phone: string): string {
   return phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
@@ -80,6 +81,8 @@ const HELP = [
   "LIST = open repairs",
   "DONE 3 = mark #3 fixed",
   "CANCEL 3 = drop #3",
+  "PAID MARIA = Maria's rent came in (PAID MARIA 600 CASH for part of it)",
+  "RENT = who's paid this month",
   "To add a repair person, share their contact card with this number.",
 ].join("\n");
 
@@ -169,6 +172,7 @@ function fromTenant(state: State, unit: Unit, text: string, now: Date): Outbound
   if (waiting && (isYes(text) || isNo(text))) {
     return isYes(text) ? tenantConfirms(state, waiting, now) : tenantDeclines(state, waiting);
   }
+  if (isRentText(text)) return tenantRentText(state, unit, text, now);
 
   const repair: Repair = {
     id: state.nextId++,
@@ -371,6 +375,9 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
     const trade = said.trade ?? text.split(/\s+/)[0]?.toLowerCase();
     return saveContact(state, landlord, name, phone, trade, said.town ?? "all");
   }
+
+  if (command === "PAID") return landlordPaid(state, landlord, rest, now);
+  if (command === "RENT") return reply(rentStatus(state, now));
 
   if (YES_WORDS.includes(command) || NO_WORDS.includes(command)) {
     const id = idArg(rest[0]);
@@ -589,8 +596,9 @@ function describe(state: State, r: Repair): string {
 /* ------------------------------- time ------------------------------- */
 
 /**
- * Call as the clock moves. Sends the day-before reminders, and asks the
- * landlord whether it got fixed a few hours after the visit.
+ * Call as the clock moves. Sends the day-before reminders, asks the
+ * landlord whether it got fixed a few hours after the visit, and sends
+ * the rent reminders (rent.ts).
  */
 export function tick(state: State, now: Date): Outbound[] {
   const out: Outbound[] = [];
@@ -613,5 +621,6 @@ export function tick(state: State, now: Date): Outbound[] {
       out.push(...toLandlords(state, `Did ${vendor?.name ?? "the repair person"} fix #${r.id} at ${unit.address}? Reply DONE ${r.id} if so.`));
     }
   }
+  out.push(...tickRent(state, now));
   return out;
 }

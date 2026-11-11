@@ -10,7 +10,10 @@ const SAM = "+1 203 555 0301";
 const SUNDAY_9PM = new Date(2026, 10, 8, 21, 0); // Sun Nov 8 2026
 
 function fresh(): State {
-  return JSON.parse(readFileSync(new URL("../data/example.json", import.meta.url), "utf8"));
+  const s: State = JSON.parse(readFileSync(new URL("../data/example.json", import.meta.url), "utf8"));
+  // Repairs only here; rent.test.ts covers rent.
+  for (const u of s.units) delete u.rent;
+  return s;
 }
 const to = (out: Outbound[], phone: string) => out.filter((o) => o.to === phone).map((o) => o.body);
 const offline: Ai = { understand: null, find: sampleFind, live: false };

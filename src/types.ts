@@ -8,6 +8,10 @@ export type Unit = {
   /** Where to search for repair people. Read from the address if missing. */
   town?: string;
   tenant: Person;
+  /** Monthly rent in dollars. No rent, no reminders for this unit. */
+  rent?: number;
+  /** Day of the month rent is due (default 1; 31 means the last day). */
+  rentDue?: number;
 };
 
 /** A business the search turned up, for the landlord to call. */
@@ -79,6 +83,14 @@ export type State = {
   lastFound?: number;
   /** A shared contact whose trade the bot asked about. */
   pendingContact?: { name: string; phone: string };
+  /** Rent the landlord marked paid. Tracking only; no money moves. */
+  payments?: import("./rent.js").Payment[];
+  /** When rent tracking began; nothing due before it gets a notice. */
+  rentSince?: string;
+  /** Rent texts already sent, by "unitId|2026-11". */
+  rentNotices?: Record<string, string[]>;
+  /** Defaults: remind 3 days before, late notice 5 days after, at 9am. */
+  rentSettings?: { remindDaysBefore?: number; graceDays?: number; hour?: number };
 };
 
 /** A text to send. The simulator shows it; later Twilio sends it. */

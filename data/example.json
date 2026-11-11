@@ -17,7 +17,9 @@
       "tenant": {
         "name": "Maria",
         "phone": "+1 203 555 0201"
-      }
+      },
+      "rent": 1450,
+      "rentDue": 1
     },
     {
       "id": "tol-2",
@@ -26,7 +28,9 @@
       "tenant": {
         "name": "Kevin",
         "phone": "+1 860 555 0202"
-      }
+      },
+      "rent": 1200,
+      "rentDue": 1
     },
     {
       "id": "ham-3",
@@ -35,7 +39,9 @@
       "tenant": {
         "name": "Priya",
         "phone": "+1 203 555 0203"
-      }
+      },
+      "rent": 1600,
+      "rentDue": 1
     }
   ],
   "vendors": [

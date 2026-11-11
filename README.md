@@ -90,6 +90,28 @@ Copy `.env.example` to `.env.local` and add `ANTHROPIC_API_KEY` (from the
 Claude Console, not a claude.ai subscription). Without a key the AI is off,
 fixed replies still work, and `FIND` shows sample results marked as such.
 
+### Rent reminders
+
+Give a unit `"rent": 1450` and `"rentDue": 1` (day of the month; 31 means
+the last day) and the same line keeps track of rent. Tracking only: tenants
+pay the way they always have and no money goes through the bot.
+
+- **3 days before it's due, 9am:** the tenant gets a friendly reminder.
+- **5 days after, 9am,** if it isn't marked paid: one nudge to the tenant,
+  and one list to the landlords of everyone not marked paid.
+- **`PAID MARIA`** marks it paid (`PAID MARIA 600 CASH` for part of it) and
+  thanks the tenant. **`RENT`** shows who's paid this month.
+- **A tenant texting "paid" / "sent it on zelle"** tells the landlord to
+  check. It doesn't mark anything paid: only the landlord does.
+- Paying a few days early counts toward next month's rent.
+- Nothing from before the line first ran is ever called late, so turning it
+  on mid-month doesn't text every tenant that they owe last month's rent.
+
+Each text goes out once per unit per month. Timings live in
+`rentSettings` in the data file (`remindDaysBefore`, `graceDays`, `hour`).
+In the simulator, **+1 week** steps through every hour, so reminders fire on
+their day. Tell tenants about the reminders before turning them on.
+
 ### Your own rentals
 
 Copy `data/example.json` to `data/real.json` and fill in real units,
@@ -154,6 +176,7 @@ What `live` does to stay safe:
 src/engine.ts      the whole flow: handleText() for each text in, tick() as time passes,
                    needsHelp/planFind/showFound around the AI and the search
 src/interpret.ts   receive(): one text start to finish, AI and search included
+src/rent.ts        rent reminders, PAID and RENT, late lists (tracking only)
 src/ai.ts          Claude: understand messy texts; web search for repair people
 src/live.ts        the real line: Twilio webhook in, real texts out, reminders every minute
 src/twilio.ts      signature check, reading a text (and shared contact cards), sending, setting the webhook

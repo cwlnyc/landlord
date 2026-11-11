@@ -13,3 +13,5 @@ See README.md for what this is and how to run it. Rules that matter when changin
 - Run `npm test` and `npm run typecheck` before committing.
 - `npm run live` sends real texts. Never weaken its Twilio signature check, its "only text known numbers" rule, or the STOP/HELP keyword pass-through. Never run it from tests.
 - Twilio credentials live only in `.env.local`. Never commit or print them.
+- Rent is tracking only: never collect, request or move money. Only the landlord's PAID marks rent paid; a tenant saying so just tells the landlord.
+- Never send a rent notice about a month due before `rentSince` (the line's first run): turning the line on must not tell every tenant they're late.

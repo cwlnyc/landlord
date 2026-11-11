@@ -87,8 +87,13 @@ createServer(async (req, res) => {
   }
   if (req.method === "POST" && req.url === "/api/clock") {
     const { hours } = await body(req);
-    saved.clockOffsetMs += Number(hours ?? 0) * 60 * 60 * 1000;
-    record(tick(saved.state, now()));
+    // Step an hour at a time, so a week's jump still sends each reminder
+    // at its moment instead of skipping past it.
+    const steps = Math.max(0, Math.min(24 * 60, Math.round(Number(hours ?? 0))));
+    for (let i = 0; i < steps; i++) {
+      saved.clockOffsetMs += 60 * 60 * 1000;
+      record(tick(saved.state, now()));
+    }
     save();
     return json({ ok: true });
   }

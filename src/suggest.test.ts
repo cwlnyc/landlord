@@ -11,7 +11,10 @@ const ROB = "+1 860 555 0303"; // handyman, Tolland
 const NOW = new Date(2026, 10, 8, 21, 0);
 
 function fresh(): State {
-  return JSON.parse(readFileSync(new URL("../data/example.json", import.meta.url), "utf8"));
+  const s: State = JSON.parse(readFileSync(new URL("../data/example.json", import.meta.url), "utf8"));
+  // Repairs only here; rent.test.ts covers rent.
+  for (const u of s.units) delete u.rent;
+  return s;
 }
 const to = (out: Outbound[], phone: string) => out.filter((o) => o.to === phone).map((o) => o.body);
 const card = (name: string, phone: string) =>

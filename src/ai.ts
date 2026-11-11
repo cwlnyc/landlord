@@ -55,6 +55,8 @@ const RULES: Record<HelpRequest["role"], string> = {
     "SEND <CODE> [repair number]  (text that repair person, using the code exactly as listed)",
     "FIND <trade> [repair number]  (search the web for a repair person, e.g. FIND plumber 3)",
     'BOOKED <result number or CODE> <M/D h:mmam> [#repair number]  (they booked someone by phone, e.g. "BOOKED 2 11/12 9:00am")',
+    "PAID <tenant first name> [amount] [how]  (their rent came in, e.g. PAID MARIA 600 cash)",
+    "RENT  (who has paid rent this month)",
     "LIST | DONE <repair number> | CANCEL <repair number> | HELP",
   ].join("\n"),
 };
