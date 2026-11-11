@@ -126,7 +126,10 @@ furnace at 9pm. Real use needs an always-on host.
 `.env.example`), with `PUBLIC_URL` set to the tunnel address and, at first,
 `ALLOW_ONLY` set to your own family's numbers.
 
-**6. Run it.** `npm run live`. It prints the webhook address; in Twilio,
+**6. Check, then run it.** `npm run check` looks over everything `live`
+needs (settings, the people file, the Twilio credentials and webhook, the AI
+key, the tunnel) and says what to fix, without printing any key. Then
+`npm run live`. It prints the webhook address; in Twilio,
 open the number, and under "A message comes in" choose Webhook, paste that
 address, HTTP POST, and save. Text the number.
 
