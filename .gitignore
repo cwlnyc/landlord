@@ -6,3 +6,4 @@ data/live-state.json.tmp
 .env.local
 .env
 legal-site/
+data/share-state.json

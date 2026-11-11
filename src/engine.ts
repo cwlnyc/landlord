@@ -212,7 +212,7 @@ function suggest(state: State, repair: Repair): string {
   }
   delete repair.suggested;
   const who = others.length ? `SEND + who to ask (${others.map((v) => v.code).join(", ")}), or ` : "";
-  return `${need ? `None of your saved people do ${need}. ` : ""}Reply ${who}${find}.`;
+  return `${need ? `No saved repair person for this (${need}). ` : ""}Reply ${who}${find}.`;
 }
 
 function tenantConfirms(state: State, repair: Repair, now: Date): Outbound[] {

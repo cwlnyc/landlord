@@ -10,7 +10,8 @@
     "live": "TZ=America/New_York tsx src/live.ts",
     "check": "tsx src/check.ts",
     "legal": "node legal/build.mjs",
-    "legal:publish": "node legal/publish.mjs"
+    "legal:publish": "node legal/publish.mjs",
+    "share": "tsx src/share.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

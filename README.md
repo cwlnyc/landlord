@@ -119,6 +119,22 @@ Copy `data/example.json` to `data/real.json` and fill in real units,
 tenants and repair people. `real.json` is gitignored so real phone numbers
 never get committed. Delete `data/state.json` to start the simulator over.
 
+## Testing on your phones, free: npm run share
+
+No phone number yet? `npm run share` puts the simulator on everyone's
+phones. It prints one link; each person opens it, taps who they are, and
+gets their own texting screen with the repair line. Same bot (AI included),
+real phones, no Twilio, no cost. The only difference from real texts is no
+notification buzz: keep the page open.
+
+- Uses `data/real.json` if it exists (else the example data), with its own
+  saved state (`data/share-state.json`), separate from `npm run dev`.
+- The link has a random key; without it the page answers 403, so a stranger
+  who finds the address can't read or send anything.
+- Ctrl+C ends the test and the link stops working. Each run makes a new link.
+- The laptop view at `http://localhost:4310` has the clock buttons, for
+  trying rent reminders together.
+
 ## Going live: a real phone number
 
 `npm run live` is the real repair line: the same engine, with texts coming

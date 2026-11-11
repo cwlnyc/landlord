@@ -24,11 +24,15 @@ try {
 const ai = makeAi();
 
 const PORT = Number(process.env.PORT ?? 4300);
-const STATE_FILE = new URL("../data/state.json", import.meta.url);
+const STATE_FILE = new URL(process.env.SIM_STATE ?? "../data/state.json", import.meta.url);
+// Set by `npm run share`: requests that come through the tunnel must carry
+// this key, so a stranger who guesses the address can't read or send.
+const SHARE_KEY = process.env.SHARE_KEY ?? "";
 const SEED_FILE = existsSync(new URL("../data/real.json", import.meta.url))
   ? new URL("../data/real.json", import.meta.url)
   : new URL("../data/example.json", import.meta.url);
 const PAGE = new URL("../public/index.html", import.meta.url);
+const PHONE_PAGE = new URL("../public/phone.html", import.meta.url);
 
 type LogEntry = { at: string; from: string; to: string; body: string };
 type Saved = { state: State; log: LogEntry[]; clockOffsetMs: number };
@@ -64,15 +68,30 @@ createServer(async (req, res) => {
     res.end(JSON.stringify(data));
   };
 
-  if (req.method === "GET" && req.url === "/") {
+  // Through the tunnel (Cloudflare adds cf-ray), the share key is required.
+  if (req.headers["cf-ray"]) {
+    const key = new URL(req.url ?? "/", "http://x").searchParams.get("key") ?? req.headers["x-share-key"];
+    if (!SHARE_KEY || key !== SHARE_KEY) {
+      res.writeHead(403, { "content-type": "text/plain" });
+      res.end("This link needs its key. Ask for the full link.");
+      return;
+    }
+  }
+  const path = (req.url ?? "/").split("?")[0];
+  if (req.method === "GET" && path === "/phone") {
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    res.end(readFileSync(PHONE_PAGE));
+    return;
+  }
+  if (req.method === "GET" && path === "/") {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     res.end(readFileSync(PAGE));
     return;
   }
-  if (req.method === "GET" && req.url === "/api/state") {
+  if (req.method === "GET" && path === "/api/state") {
     return json({ ...saved, now: now().toISOString(), ai: ai.live });
   }
-  if (req.method === "POST" && req.url === "/api/text") {
+  if (req.method === "POST" && path === "/api/text") {
     const { from, text } = await body(req);
     if (typeof from !== "string" || typeof text !== "string" || !text.trim()) {
       return json({ error: "from and text are required" }, 400);
@@ -86,7 +105,7 @@ createServer(async (req, res) => {
     save();
     return json({ ok: true });
   }
-  if (req.method === "POST" && req.url === "/api/clock") {
+  if (req.method === "POST" && path === "/api/clock") {
     const { hours } = await body(req);
     // Step an hour at a time, so a week's jump still sends each reminder
     // at its moment instead of skipping past it.
@@ -98,7 +117,7 @@ createServer(async (req, res) => {
     save();
     return json({ ok: true });
   }
-  if (req.method === "POST" && req.url === "/api/reset") {
+  if (req.method === "POST" && path === "/api/reset") {
     saved = seed();
     save();
     return json({ ok: true });

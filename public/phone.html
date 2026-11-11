@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f1ec">
+<title>Repair line test</title>
+<style>
+  :root { --bg:#f4f1ec; --fg:#1d1b18; --muted:#6b665e; --line:#e3ded5; --me:#2f6fde; --them:#e9e7e3; --card:#fff; --accent:#d97757; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#141311; --fg:#ece9e4; --muted:#9a948a; --line:#2c2a27; --me:#3b7af0; --them:#2a2826; --card:#1d1c19; }
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:17px/1.4 -apple-system,system-ui,sans-serif; }
+  .pick { max-width:480px; margin:0 auto; padding:24px 16px; }
+  .pick h1 { font-size:24px; margin:8px 0 4px; }
+  .pick p { color:var(--muted); margin:0 0 20px; }
+  .pick a { display:flex; justify-content:space-between; align-items:center; padding:16px; margin-bottom:10px;
+            background:var(--card); border:1px solid var(--line); border-radius:14px; color:inherit; text-decoration:none; font-weight:600; }
+  .pick a span { color:var(--muted); font-weight:400; font-size:15px; }
+  .chat { display:flex; flex-direction:column; height:100dvh; max-width:600px; margin:0 auto; }
+  header { padding:12px 16px; border-bottom:1px solid var(--line); text-align:center; }
+  header b { display:block; }
+  header small { color:var(--muted); }
+  header a { position:absolute; left:16px; top:14px; color:var(--me); text-decoration:none; }
+  .thread { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:6px; }
+  .msg { max-width:80%; padding:8px 12px; border-radius:18px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .in { align-self:flex-start; background:var(--them); }
+  .out { align-self:flex-end; background:var(--me); color:#fff; }
+  .msg time { display:block; font-size:11px; opacity:.6; margin-top:2px; }
+  .empty { color:var(--muted); text-align:center; margin-top:40px; padding:0 24px; }
+  form { display:flex; gap:8px; padding:10px 12px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--bg); }
+  input { flex:1; min-width:0; font:inherit; font-size:17px; padding:10px 14px; border-radius:20px; border:1px solid var(--line); background:var(--card); color:var(--fg); }
+  button { font:inherit; font-weight:600; border:0; border-radius:20px; padding:0 16px; background:var(--accent); color:#fff; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// One person's phone: their own thread with the repair line, nothing else.
+// The same bot as the simulator; nothing is texted to a real phone.
+const params = new URLSearchParams(location.search);
+const key = params.get("key") || "";
+const me = params.get("n") || "";
+const digits = (p) => p.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+const api = (path, body) =>
+  fetch(path, {
+    method: body ? "POST" : "GET",
+    headers: { "content-type": "application/json", "x-share-key": key },
+    body: body ? JSON.stringify(body) : undefined,
+  }).then((r) => (r.ok ? r.json() : Promise.reject(r.status)));
+const app = document.getElementById("app");
+
+function people(state) {
+  return [
+    ...state.landlords.map((l) => ({ name: l.name, role: "Landlord", phone: l.phone })),
+    ...state.units.map((u) => ({ name: u.tenant.name, role: "Tenant · " + u.address, phone: u.tenant.phone })),
+    ...state.vendors.filter((v) => v.textable !== false).map((v) => ({ name: v.name, role: "Repair person · " + v.trade, phone: v.phone })),
+  ];
+}
+const fmt = (iso) => new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "2-digit" });
+
+function link(n) {
+  const q = new URLSearchParams({ n });
+  if (key) q.set("key", key);
+  return "?" + q;
+}
+
+async function pickScreen() {
+  const data = await api("/api/state");
+  app.className = "pick";
+  app.innerHTML = "<h1>Who are you?</h1><p>Pick yourself. You'll see only your own texts with the repair line.</p>";
+  for (const p of people(data.state)) {
+    const a = document.createElement("a");
+    a.href = link(digits(p.phone));
+    a.innerHTML = "<div></div><span></span>";
+    a.firstChild.textContent = p.name;
+    a.lastChild.textContent = p.role;
+    app.append(a);
+  }
+}
+
+let person = null;
+async function chatScreen() {
+  const data = await api("/api/state");
+  person = people(data.state).find((p) => digits(p.phone) === me);
+  if (!person) return pickScreen();
+  document.title = person.name + " · Repair line";
+  app.className = "chat";
+  app.innerHTML = `<header style="position:relative"><a href="${link("").replace(/n=&?/, "")}">‹ Back</a><b>Repair line</b><small></small></header>
+    <div class="thread"></div>
+    <form><input placeholder="Text message" autocomplete="off" enterkeyhint="send"><button>Send</button></form>`;
+  app.querySelector("small").textContent = "You are " + person.name;
+  const form = app.querySelector("form");
+  const input = form.querySelector("input");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = "";
+    await api("/api/text", { from: person.phone, text });
+    draw(await api("/api/state"));
+  });
+  draw(data);
+  setInterval(async () => { if (!document.hidden) draw(await api("/api/state")); }, 2500);
+}
+
+let shown = -1;
+function draw(data) {
+  const thread = app.querySelector(".thread");
+  const mine = data.log.filter((m) => digits(m.to) === me || digits(m.from) === me);
+  if (mine.length === shown) return;
+  shown = mine.length;
+  thread.replaceChildren(
+    ...(mine.length
+      ? mine.map((m) => {
+          const el = document.createElement("div");
+          el.className = "msg " + (digits(m.from) === me ? "out" : "in");
+          el.textContent = m.body;
+          const t = document.createElement("time");
+          t.textContent = fmt(m.at);
+          el.append(t);
+          return el;
+        })
+      : [Object.assign(document.createElement("p"), { className: "empty", textContent: "No texts yet. Send one, like a tenant would: “my sink is leaking”." })]),
+  );
+  thread.scrollTop = thread.scrollHeight;
+}
+
+(me ? chatScreen() : pickScreen()).catch((status) => {
+  app.className = "pick";
+  app.innerHTML = "<h1>Can't open the test</h1><p></p>";
+  app.querySelector("p").textContent = status === 403 ? "This link is missing its key. Ask for the full link." : "Is npm run share still running?";
+});
+</script>
+</body>
+</html>

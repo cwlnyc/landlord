@@ -52,7 +52,7 @@ describe("the bot suggests who to send", () => {
   it("no one saved fits: says so and offers FIND", () => {
     const s = fresh();
     const out = handleText(s, MARIA, "outlet sparking in kitchen", NOW);
-    expect(to(out, MOM)[0]).toMatch(/None of your saved people do electrician\..*FIND electrician to search near Naugatuck/);
+    expect(to(out, MOM)[0]).toMatch(/No saved repair person for this \(electrician\)\..*FIND electrician to search near Naugatuck/);
     expect(to(handleText(s, MOM, "yes", NOW), MOM)[0]).toMatch(/nothing waiting on a yes/);
   });
 
