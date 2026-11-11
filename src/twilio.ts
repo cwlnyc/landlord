@@ -91,5 +91,27 @@ export async function sendSms(cfg: TwilioConfig, to: string, body: string): Prom
   }
 }
 
+/**
+ * Points the number's "A message comes in" webhook at `url` (HTTP POST),
+ * the same as doing it in the console. Returns what it was before.
+ */
+export async function setWebhook(cfg: TwilioConfig, url: string): Promise<string> {
+  const base = `https://api.twilio.com/2010-04-01/Accounts/${cfg.accountSid}/IncomingPhoneNumbers`;
+  const list = await fetch(`${base}.json?PhoneNumber=${encodeURIComponent(cfg.from)}`, {
+    headers: { authorization: basic(cfg) },
+  });
+  if (!list.ok) throw new Error(`Twilio wouldn't list numbers (${list.status}): check the SID and Auth Token.`);
+  const found = ((await list.json()) as { incoming_phone_numbers: { sid: string; sms_url: string }[] })
+    .incoming_phone_numbers[0];
+  if (!found) throw new Error(`${cfg.from} isn't a number on this Twilio account: check TWILIO_NUMBER.`);
+  const res = await fetch(`${base}/${found.sid}.json`, {
+    method: "POST",
+    headers: { authorization: basic(cfg), "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ SmsUrl: url, SmsMethod: "POST" }),
+  });
+  if (!res.ok) throw new Error(`Twilio wouldn't update the webhook (${res.status}): ${await res.text()}`);
+  return found.sms_url;
+}
+
 /** An empty reply: the line answers by sending its own texts instead. */
 export const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';

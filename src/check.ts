@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { digits } from "./engine.js";
+import { findCloudflared } from "./tunnel.js";
 import { toE164 } from "./twilio.js";
 import type { State } from "./types.js";
 
@@ -35,7 +36,7 @@ if (!existsSync(ENV)) {
   process.loadEnvFile(ENV);
 }
 const env = (name: string) => process.env[name]?.trim() ?? "";
-for (const name of ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_NUMBER", "PUBLIC_URL"]) {
+for (const name of ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_NUMBER"]) {
   const v = env(name);
   if (!v) bad(`${name} is empty`, `open -e .env.local and fill in ${name}, then save (Cmd+S)`);
   else if (looksFake(v)) bad(`${name} still looks like a placeholder`, `replace it with the real value from Twilio / the tunnel`);
@@ -44,8 +45,14 @@ for (const name of ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_NUMBER", 
 if (env("TWILIO_ACCOUNT_SID") && !/^AC[0-9a-f]{32}$/i.test(env("TWILIO_ACCOUNT_SID"))) {
   bad("TWILIO_ACCOUNT_SID doesn't look right", "it starts with AC followed by 32 letters/numbers (Twilio console, Account Info)");
 }
-if (env("PUBLIC_URL").endsWith("/sms")) {
-  bad("PUBLIC_URL ends with /sms", "remove /sms from PUBLIC_URL; the line adds it");
+const autoTunnel = !env("PUBLIC_URL");
+if (autoTunnel) {
+  if (findCloudflared()) ok("PUBLIC_URL empty: npm run live starts its own tunnel and sets the Twilio webhook");
+  else bad("PUBLIC_URL is empty and cloudflared isn't downloaded", "download it to ~/bin (see README), or set PUBLIC_URL");
+} else if (looksFake(env("PUBLIC_URL"))) {
+  bad("PUBLIC_URL still looks like a placeholder", "leave it empty to let npm run live make its own tunnel");
+} else {
+  ok("PUBLIC_URL is set (fixed address; leave it empty for an automatic tunnel)");
 }
 if (env("ANTHROPIC_API_KEY")) ok("ANTHROPIC_API_KEY is set (AI on)");
 else warn("ANTHROPIC_API_KEY is empty: AI off", "fine for a test; people must reply in exact formats (YES, TUE 9AM, 1/2)");
@@ -126,7 +133,8 @@ section("Twilio");
 const sid = env("TWILIO_ACCOUNT_SID");
 const token = env("TWILIO_AUTH_TOKEN");
 const auth = `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`;
-const webhook = `${env("PUBLIC_URL").replace(/\/+$/, "")}/sms`;
+const webhook = `${env("PUBLIC_URL").replace(/\/+$/, "").replace(/\/sms$/, "")}/sms`;
+let currentWebhook = "";
 
 if (sid && token) {
   try {
@@ -154,7 +162,11 @@ if (sid && token) {
         bad(`${number} isn't a number on this Twilio account`, "check TWILIO_NUMBER against Phone Numbers → Active numbers");
       } else {
         ok(`${number} belongs to this account`);
-        if (found.sms_url === webhook && found.sms_method === "POST") ok("its webhook points at this line");
+        currentWebhook = found.sms_url;
+        if (autoTunnel) {
+          if (/trycloudflare\.com\/sms$/.test(found.sms_url)) ok("its webhook is a tunnel address (npm run live keeps it current)");
+          else warn("its webhook isn't a tunnel address yet", "npm run live sets it when it starts");
+        } else if (found.sms_url === webhook && found.sms_method === "POST") ok("its webhook points at this line");
         else
           bad(
             `its webhook is ${found.sms_url ? `"${found.sms_url}"` : "not set"}${found.sms_url && found.sms_method !== "POST" ? ` (${found.sms_method})` : ""}`,
@@ -189,14 +201,15 @@ if (!local) {
   warn("npm run live isn't running", "start it in its own terminal tab, then run npm run check again");
 } else {
   ok("npm run live is running");
-  const remote = env("PUBLIC_URL")
-    ? await fetch(`${env("PUBLIC_URL").replace(/\/+$/, "")}/health`).then((r) => r.ok, () => false)
-    : false;
+  const base = autoTunnel ? currentWebhook.replace(/\/sms$/, "") : env("PUBLIC_URL").replace(/\/+$/, "").replace(/\/sms$/, "");
+  const remote = base ? await fetch(`${base}/health`).then((r) => r.ok, () => false) : false;
   if (remote) ok("the tunnel reaches it: texts can get in");
   else
     bad(
       "the tunnel doesn't reach it",
-      "start the tunnel (~/bin/cloudflared tunnel --url http://localhost:4301); if the address changed, update PUBLIC_URL, restart npm run live and the Twilio webhook",
+      autoTunnel
+        ? "restart npm run live (it starts the tunnel and sets the webhook); it can take a few seconds after starting"
+        : "start your tunnel; if its address changed, update PUBLIC_URL, restart npm run live and the Twilio webhook",
     );
 }
 

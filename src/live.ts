@@ -3,7 +3,8 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { makeAi } from "./ai.js";
 import { digits, tick } from "./engine.js";
 import { receive } from "./interpret.js";
-import { EMPTY_TWIML, isFromTwilio, readInbound, sendSms, toE164, type TwilioConfig } from "./twilio.js";
+import { findCloudflared, startTunnel } from "./tunnel.js";
+import { EMPTY_TWIML, isFromTwilio, readInbound, sendSms, setWebhook, toE164, type TwilioConfig } from "./twilio.js";
 import type { Outbound, State } from "./types.js";
 
 /**
@@ -13,8 +14,10 @@ import type { Outbound, State } from "./types.js";
  *
  *   npm run live
  *
- * Needs in .env.local: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_NUMBER,
- * PUBLIC_URL (the address Twilio posts to, e.g. your tunnel). Starts from
+ * Needs in .env.local: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_NUMBER.
+ * With PUBLIC_URL empty it starts its own Cloudflare quick tunnel and points
+ * the Twilio webhook at it, so nothing is copied by hand; set PUBLIC_URL
+ * only when the line has a fixed address (a host, or a tunnel you run). Starts from
  * data/real.json; keeps its state in data/live-state.json. Both gitignored.
  *
  * While testing, set ALLOW_ONLY to a comma-separated list of numbers: texts
@@ -41,7 +44,8 @@ const cfg: TwilioConfig = {
   authToken: need("TWILIO_AUTH_TOKEN"),
   from: toE164(need("TWILIO_NUMBER")),
 };
-const WEBHOOK_URL = `${need("PUBLIC_URL").replace(/\/+$/, "")}/sms`;
+// Set before the server listens: from PUBLIC_URL, or from the tunnel below.
+let WEBHOOK_URL = "";
 const PORT = Number(process.env.PORT ?? 4301);
 const ALLOW_ONLY = (process.env.ALLOW_ONLY ?? "")
   .split(",")
@@ -105,7 +109,7 @@ const serial = (job: () => Promise<void>) => {
 // they must not become a "repair" or a command.
 const KEYWORDS = /^(stop|stopall|unsubscribe|cancel|end|quit|start|unstop|help|info)$/i;
 
-createServer(async (req, res) => {
+const server = createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/health") {
     res.writeHead(200).end("ok");
     return;
@@ -120,7 +124,7 @@ createServer(async (req, res) => {
   const params = Object.fromEntries(new URLSearchParams(raw));
   const signature = req.headers["x-twilio-signature"];
   if (!isFromTwilio(cfg.authToken, WEBHOOK_URL, params, typeof signature === "string" ? signature : undefined)) {
-    console.warn("Rejected a request that wasn't signed by Twilio (check PUBLIC_URL matches the webhook in Twilio).");
+    console.warn("Rejected a request that wasn't signed by Twilio (the Twilio webhook must be exactly " + WEBHOOK_URL + ").");
     res.writeHead(403).end();
     return;
   }
@@ -136,9 +140,38 @@ createServer(async (req, res) => {
     save();
     await deliver(out);
   });
-}).listen(PORT, () => {
+});
+
+const fixedUrl = process.env.PUBLIC_URL?.trim().replace(/\/+$/, "").replace(/\/sms$/, "");
+if (fixedUrl) {
+  WEBHOOK_URL = `${fixedUrl}/sms`;
+  console.log(`Using PUBLIC_URL. Twilio webhook must be: ${WEBHOOK_URL} (A message comes in -> Webhook, HTTP POST)`);
+} else {
+  const bin = findCloudflared();
+  if (!bin) {
+    console.error("No cloudflared found (looked in ~/bin and the usual places). Download it (see README), or set PUBLIC_URL.");
+    process.exit(1);
+  }
+  console.log("Starting a tunnel...");
+  try {
+    const tunnel = await startTunnel(bin, PORT);
+    WEBHOOK_URL = `${tunnel.url}/sms`;
+    tunnel.child.on("exit", () => {
+      console.error("\nThe tunnel stopped, so texts can't reach the line. Restart npm run live.");
+      process.exit(1);
+    });
+    process.on("exit", () => tunnel.child.kill());
+    await setWebhook(cfg, WEBHOOK_URL);
+    console.log(`Tunnel up and Twilio webhook set to ${WEBHOOK_URL}`);
+  } catch (error) {
+    console.error(String(error instanceof Error ? error.message : error));
+    process.exit(1);
+  }
+}
+process.on("SIGINT", () => process.exit(0));
+
+server.listen(PORT, () => {
   console.log(`Repair line LIVE on port ${PORT}, number ${cfg.from}`);
-  console.log(`Twilio webhook must be: ${WEBHOOK_URL}  (A message comes in -> Webhook, HTTP POST)`);
   console.log(ai.live ? "AI on" : "AI off (no ANTHROPIC_API_KEY)");
   if (ALLOW_ONLY.length) console.log(`Test mode: only texting ${ALLOW_ONLY.length} allowed number(s).`);
 });

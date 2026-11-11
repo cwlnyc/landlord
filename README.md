@@ -115,23 +115,30 @@ a trial account can usually text only numbers verified in the console.
 units, tenants and repair people (gitignored). Tell everyone on it the
 repair line will text them; they can reply STOP at any time.
 
-**4. A public address.** Twilio has to reach your computer. For testing,
-a free Cloudflare tunnel (`brew install cloudflared`, then
-`cloudflared tunnel --url http://localhost:4301`) prints a
-`https://….trycloudflare.com` address. It changes each time it starts, and
-the line is off whenever the computer sleeps: fine for testing, not for a
-furnace at 9pm. Real use needs an always-on host.
+**4. cloudflared.** Twilio has to reach your computer, through a free
+Cloudflare tunnel. Download cloudflared once to `~/bin` (no Homebrew needed):
+
+```bash
+mkdir -p ~/bin && cd ~/bin
+curl -L -o cloudflared.tgz "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-$( [ "$(uname -m)" = arm64 ] && echo arm64 || echo amd64 ).tgz"
+tar -xzf cloudflared.tgz && rm cloudflared.tgz
+```
+
+`npm run live` starts the tunnel itself and points the Twilio webhook at it
+every time, so there's no address to copy. The line is off whenever the
+computer sleeps: fine for testing, not for a furnace at 9pm. Real use needs
+an always-on host (then set `PUBLIC_URL` to its address).
 
 **5. Settings.** Fill in the Twilio lines of `.env.local` (see
-`.env.example`), with `PUBLIC_URL` set to the tunnel address and, at first,
-`ALLOW_ONLY` set to your own family's numbers.
+`.env.example`). Leave `PUBLIC_URL` empty. At first, set `ALLOW_ONLY` to
+your own family's numbers.
 
 **6. Check, then run it.** `npm run check` looks over everything `live`
 needs (settings, the people file, the Twilio credentials and webhook, the AI
 key, the tunnel) and says what to fix, without printing any key. Then
-`npm run live`. It prints the webhook address; in Twilio,
-open the number, and under "A message comes in" choose Webhook, paste that
-address, HTTP POST, and save. Text the number.
+`npm run live` (it starts the tunnel and sets the Twilio webhook), and text
+the number. Run `npm run check` again while live is running to confirm a
+text can get in.
 
 What `live` does to stay safe:
 - Rejects any request not signed by Twilio, so nobody else can make the
@@ -149,7 +156,9 @@ src/engine.ts      the whole flow: handleText() for each text in, tick() as time
 src/interpret.ts   receive(): one text start to finish, AI and search included
 src/ai.ts          Claude: understand messy texts; web search for repair people
 src/live.ts        the real line: Twilio webhook in, real texts out, reminders every minute
-src/twilio.ts      signature check, reading a text (and shared contact cards), sending
+src/twilio.ts      signature check, reading a text (and shared contact cards), sending, setting the webhook
+src/tunnel.ts      starts a Cloudflare quick tunnel and reads its address
+src/check.ts       npm run check: what's wrong before a live test
 src/parse-time.ts  reads "tue 9am" style times; returns null rather than guess
 src/server.ts      the simulator's local server and fake clock
 public/index.html  the three-phone page
