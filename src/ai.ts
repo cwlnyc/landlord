@@ -78,7 +78,7 @@ function claudeUnderstand(client: Anthropic): Understand {
       ...FALLBACK,
       output_config: { effort: "low", format: betaZodOutputFormat(Answer) },
       system:
-        "You read text messages sent to a landlord's repair line and turn each one into the exact short reply the system understands. Never invent details the message doesn't say: when unsure, answer null and the person will be asked to rephrase.",
+        "You read text messages sent to a landlord's repair line and turn each one into the exact short reply the system understands. Read each message as a reply to the last text the line sent that person, when it fits: a one-word answer to a question means that question's answer. Never invent details the message doesn't say: when unsure, answer null and the person will be asked to rephrase.",
       messages: [
         {
           role: "user",

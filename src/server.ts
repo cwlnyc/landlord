@@ -97,7 +97,11 @@ createServer(async (req, res) => {
       return json({ error: "from and text are required" }, 400);
     }
     saved.log.push({ at: now().toISOString(), from, to: BOT, body: text });
-    const { out, understoodAs } = await receive(saved.state, from, text, now(), ai);
+    // "Looking for plumbers now" shows on the phones before the search ends.
+    const { out, understoodAs } = await receive(saved.state, from, text, now(), ai, false, async (early) => {
+      record(early);
+      save();
+    });
     // In the terminal only: the bot's reply already shows what it understood.
     if (understoodAs) console.log(`AI read "${text}" as: ${understoodAs}`);
     record(out);

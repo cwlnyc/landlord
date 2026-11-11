@@ -132,7 +132,11 @@ const server = createServer(async (req, res) => {
   await serial(async () => {
     const { from, text } = await readInbound(cfg, params);
     console.log(`<- ${from}: ${text.split("\n")[0]}`);
-    const { out, understoodAs } = await receive(state, from, text, new Date(), ai, true);
+    // "Looking for plumbers now" goes out as a real text before the search ends.
+    const { out, understoodAs } = await receive(state, from, text, new Date(), ai, true, async (early) => {
+      save();
+      await deliver(early);
+    });
     if (understoodAs) console.log(`   AI read it as: ${understoodAs}`);
     save();
     await deliver(out);

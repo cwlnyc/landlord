@@ -81,6 +81,10 @@ export type State = {
   found?: Record<string, Found[]>;
   /** The repair the latest search was for, so "BOOKED 1 …" needs no id. */
   lastFound?: number;
+  /** The last text the line sent each number, so a short answer is read in context. */
+  lastSent?: Record<string, string>;
+  /** Landlords the line just asked "what kind of repair person?", by number, with the repair. */
+  pendingFind?: Record<string, number>;
   /** A shared contact whose trade the bot asked about. */
   pendingContact?: { name: string; phone: string };
   /** Rent the landlord marked paid. Tracking only; no money moves. */

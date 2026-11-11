@@ -110,10 +110,16 @@ export type HelpRequest = { role: Role; context: string };
  * (or the text is a free-form repair report, which needs no translating).
  */
 export function needsHelp(state: State, from: string, body: string, now: Date): HelpRequest | null {
+  const help = needsHelpWithout(state, from, body, now);
+  const last = state.lastSent?.[digits(from)];
+  return help && last ? { ...help, context: `${help.context}\nThe last text the line sent them, which their message may be answering:\n"${last}"` } : help;
+}
+
+function needsHelpWithout(state: State, from: string, body: string, now: Date): HelpRequest | null {
   const text = body.trim();
   if (landlordOf(state, from)) {
     const word = (text.split(/\s+/)[0] ?? "").toUpperCase().replace(/[^A-Z]/g, "");
-    if (LANDLORD_COMMANDS.includes(word) || readContactCard(text) || state.pendingContact) return null;
+    if (LANDLORD_COMMANDS.includes(word) || readContactCard(text) || state.pendingContact || state.pendingFind?.[digits(from)]) return null;
     const open = state.repairs.filter((r) => OPEN.includes(r.status));
     const found = state.lastFound !== undefined ? state.found?.[state.lastFound] : undefined;
     return {
@@ -483,13 +489,20 @@ export type FindPlan = { repairId: number; trade: string; town: string; problem:
  * search for. The search itself is outside the engine (it's slow and costs
  * money); its results come back through `showFound`.
  */
-export function planFind(state: State, text: string): FindPlan | { reply: string } {
+export function planFind(state: State, text: string, from?: string): FindPlan | { reply: string } {
   const words = text.trim().split(/\s+/).slice(1);
   const idWord = words.find((w) => /^#?\d+$/.test(w));
   const repair = pickRepair(state, idArg(idWord));
   if (!repair) return { reply: "Which repair? Reply LIST, then FIND + a trade + the repair number, e.g. FIND HVAC 3." };
-  const trade = words.filter((w) => w !== idWord).join(" ") || vendorOf(state, repair)?.trade || "";
-  if (!trade) return { reply: `What kind of repair person? e.g. FIND HVAC ${repair.id} or FIND PLUMBER ${repair.id}.` };
+  // What they said, else who was asked before, else what the problem needs
+  // ("sink leaking" is a plumber): only ask when none of those says.
+  const trade =
+    words.filter((w) => w !== idWord).join(" ") || vendorOf(state, repair)?.trade || tradeForProblem(repair.text) || "";
+  if (!trade) {
+    // Remember the question, so a bare "plumber" next is read as the answer.
+    if (from) state.pendingFind = { ...state.pendingFind, [digits(from)]: repair.id };
+    return { reply: `What kind of repair person for #${repair.id} ("${repair.text}")? Reply like PLUMBER, HVAC or ELECTRICIAN.` };
+  }
   const unit = unitOf(state, repair);
   return { repairId: repair.id, trade, town: townOf(unit), problem: repair.text };
 }

@@ -76,6 +76,7 @@ export function prepareOutbound(state: State, out: Outbound[], now: Date): Outbo
       };
     }
     ready.push(o);
+    state.lastSent = { ...state.lastSent, [d]: o.body };
   }
   state.welcomed = [...welcomed];
   return ready;

@@ -1,6 +1,6 @@
 import type { Ai } from "./ai.js";
 import { handleKeyword, prepareOutbound } from "./compliance.js";
-import { handleText, needsHelp, planFind, showFound, digits } from "./engine.js";
+import { LANDLORD_COMMANDS, handleText, needsHelp, planFind, showFound, digits } from "./engine.js";
 import type { Outbound, State } from "./types.js";
 
 /**
@@ -19,6 +19,11 @@ export async function receive(
   ai: Ai,
   /** True on the live line, where Twilio answers STOP/START/HELP itself. */
   carrierReplies = false,
+  /**
+   * Sends texts right away, before the rest is ready (the "looking now" note
+   * before a slow search). Without it they go first in the returned list.
+   */
+  sendNow?: (out: Outbound[]) => Promise<void>,
 ): Promise<{ out: Outbound[]; understoodAs?: string }> {
   const keyword = handleKeyword(state, from, body, now, carrierReplies);
   if (keyword) {
@@ -30,8 +35,14 @@ export async function receive(
     const others = keyword.filter((o) => digits(o.to) !== d);
     return { out: [...toSender, ...prepareOutbound(state, others, now)] };
   }
-  const result = await respond(state, from, body, now, ai);
-  return { ...result, out: prepareOutbound(state, result.out, now) };
+  const early: Outbound[] = [];
+  const now_ = async (out: Outbound[]) => {
+    const ready = prepareOutbound(state, out, now);
+    if (sendNow) await sendNow(ready);
+    else early.push(...ready);
+  };
+  const result = await respond(state, from, body, now, ai, now_);
+  return { ...result, out: [...early, ...prepareOutbound(state, result.out, now)] };
 }
 
 async function respond(
@@ -40,8 +51,20 @@ async function respond(
   body: string,
   now: Date,
   ai: Ai,
+  sendNow: (out: Outbound[]) => Promise<void>,
 ): Promise<{ out: Outbound[]; understoodAs?: string }> {
   let text = body.trim();
+  const isLandlord = state.landlords.some((l) => digits(l.phone) === digits(from));
+
+  // The line just asked this landlord "what kind of repair person?": a reply
+  // that isn't a command is the answer, never read some other way.
+  const pending = state.pendingFind?.[digits(from)];
+  if (pending !== undefined) {
+    const { [digits(from)]: _, ...rest } = state.pendingFind!;
+    state.pendingFind = rest;
+    const word = (text.split(/\s+/)[0] ?? "").toUpperCase().replace(/[^A-Z]/g, "");
+    if (isLandlord && !LANDLORD_COMMANDS.includes(word)) text = `FIND ${text} #${pending}`;
+  }
   let understoodAs: string | undefined;
 
   const help = needsHelp(state, from, text, now);
@@ -58,10 +81,11 @@ async function respond(
     }
   }
 
-  const isLandlord = state.landlords.some((l) => digits(l.phone) === digits(from));
   if (isLandlord && /^find\b/i.test(text)) {
-    const plan = planFind(state, text);
+    const plan = planFind(state, text, from);
     if ("reply" in plan) return { out: [{ to: from, body: plan.reply }], understoodAs };
+    // A web search takes a while; say so at once, or it looks broken.
+    await sendNow([{ to: from, body: `Looking for ${plan.trade} near ${plan.town} for #${plan.repairId} now. This takes about a minute.` }]);
     try {
       const results = await ai.find(plan);
       return { out: showFound(state, plan, results, !ai.live), understoodAs };

@@ -52,7 +52,8 @@ describe("FIND and BOOKED: when the usual person can't come", () => {
     const s = fresh();
     samSaysNo(s);
     const found = await receive(s, MOM, "FIND HVAC", SUNDAY_9PM, offline);
-    const list = to(found.out, MOM)[0]!;
+    expect(to(found.out, MOM)[0]).toMatch(/^Looking for HVAC near Naugatuck for #1 now/);
+    const list = to(found.out, MOM)[1]!;
     expect(list).toMatch(/SAMPLE RESULTS/);
     expect(list).toMatch(/1\. Naugatuck HVAC Pros \(sample\) 4\.9★ \(190 reviews\), 24\/7 emergency service\n {3}\(203\) 555-0191/);
     expect(list).toMatch(/BOOKED 1 TOMORROW 8AM/);
@@ -99,7 +100,8 @@ describe("FIND and BOOKED: when the usual person can't come", () => {
     const broken: Ai = { ...offline, find: async () => { throw new Error("network"); } };
     vi.spyOn(console, "error").mockImplementation(() => {});
     const { out } = await receive(s, MOM, "FIND HVAC", SUNDAY_9PM, broken);
-    expect(to(out, MOM)[0]).toMatch(/didn't work/);
+    expect(to(out, MOM)[0]).toMatch(/^Looking for HVAC/);
+    expect(to(out, MOM)[1]).toMatch(/didn't work/);
   });
 });
 
@@ -151,6 +153,75 @@ describe("messy texts and the AI", () => {
     samSaysNo(s);
     const ai: Ai = { understand: async () => "FIND hvac 1", find: sampleFind, live: false };
     const { out } = await receive(s, MOM, "can you look for another heating guy", SUNDAY_9PM, ai);
-    expect(to(out, MOM)[0]).toMatch(/HVAC near Naugatuck for #1/);
+    expect(to(out, MOM)[1]).toMatch(/HVAC near Naugatuck for #1:/);
+  });
+});
+
+describe("FIND in context (from the family test)", () => {
+  // Dad's test: a saved repair person had the code PLUMBER, he texted FIND,
+  // was asked what kind, answered "plumber", and the line read it as
+  // "send the saved plumber". Then the search was silent for a while.
+  function withSavedPlumber() {
+    const s = fresh();
+    s.vendors.push({ code: "PLUMBER", name: "Test Plumber", trade: "plumber", town: "all", phone: "+1 203 555 0399" });
+    s.welcomed!.push("2035550399");
+    return s;
+  }
+
+  it("a bare FIND takes the trade from the problem: a leak means a plumber", async () => {
+    const s = withSavedPlumber();
+    handleText(s, MARIA, "kitchen sink is leaking", SUNDAY_9PM);
+    const { out } = await receive(s, MOM, "find", SUNDAY_9PM, offline);
+    expect(to(out, MOM)[0]).toMatch(/^Looking for plumber near Naugatuck for #1 now/);
+    expect(to(out, MOM)[1]).toMatch(/PLUMBER near Naugatuck for #1:/);
+  });
+
+  it("when it has to ask, the next word is the answer, even if a saved code matches it", async () => {
+    const s = withSavedPlumber();
+    handleText(s, MARIA, "weird noise in the wall", SUNDAY_9PM);
+    let { out } = await receive(s, MOM, "FIND", SUNDAY_9PM, offline);
+    expect(to(out, MOM)[0]).toMatch(/What kind of repair person for #1 \("weird noise in the wall"\)\?/);
+    // An AI that would misread it, like it did for Dad, must not be asked.
+    const wouldMisread: Ai = { understand: async () => "SEND PLUMBER 1", find: sampleFind, live: false };
+    ({ out } = await receive(s, MOM, "plumber", SUNDAY_9PM, wouldMisread));
+    expect(to(out, MOM)[0]).toMatch(/^Looking for plumber near Naugatuck for #1 now/);
+    expect(s.repairs[0]!.status).toBe("new"); // nobody was sent
+    expect(s.pendingFind).toEqual({});
+  });
+
+  it("a command instead of the answer cancels the question", async () => {
+    const s = withSavedPlumber();
+    handleText(s, MARIA, "weird noise in the wall", SUNDAY_9PM);
+    await receive(s, MOM, "FIND", SUNDAY_9PM, offline);
+    await receive(s, MOM, "LIST", SUNDAY_9PM, offline);
+    expect(s.pendingFind).toEqual({});
+  });
+
+  it("the 'looking now' note goes out before the search finishes", async () => {
+    const s = withSavedPlumber();
+    handleText(s, MARIA, "kitchen sink is leaking", SUNDAY_9PM);
+    const sentFirst: string[] = [];
+    let searchStarted = false;
+    const slow: Ai = {
+      understand: null,
+      live: true,
+      find: async (plan) => {
+        searchStarted = true;
+        expect(sentFirst[0]).toMatch(/Looking for plumber/); // already sent
+        return sampleFind(plan);
+      },
+    };
+    const { out } = await receive(s, MOM, "find", SUNDAY_9PM, slow, false, async (now) => {
+      sentFirst.push(...now.map((o) => o.body));
+    });
+    expect(searchStarted).toBe(true);
+    expect(to(out, MOM)[0]).toMatch(/PLUMBER near Naugatuck/); // only the results are left
+  });
+
+  it("the AI is shown the last text the line sent, so it can read replies in context", () => {
+    const s = withSavedPlumber();
+    s.lastSent = { "2035550101": "Send Sam (HVAC)? Reply YES, or FIND HVAC to search near Naugatuck." };
+    const help = needsHelp(s, MOM, "go ahead with him", SUNDAY_9PM);
+    expect(help!.context).toMatch(/The last text the line sent them[^]*Send Sam \(HVAC\)\?/);
   });
 });
