@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import type { FindPlan, HelpRequest } from "./engine.js";
+import { TRADE_LABELS } from "./match.js";
 import type { Found } from "./types.js";
 
 /**
@@ -20,7 +21,9 @@ import type { Found } from "./types.js";
 
 export type Understand = (req: HelpRequest & { text: string; now: Date }) => Promise<string | null>;
 export type Finder = (plan: FindPlan) => Promise<Found[]>;
-export type Ai = { understand: Understand | null; find: Finder; live: boolean };
+/** Which trade a repair needs, when the keywords can't tell. */
+export type TradeReader = (problem: string) => Promise<string | null>;
+export type Ai = { understand: Understand | null; find: Finder; live: boolean; trade?: TradeReader | null };
 
 const MODEL = process.env.REPAIR_MODEL || "claude-opus-5-5";
 // Retry on another model if this one declines; routing is Anthropic's default.
@@ -32,7 +35,7 @@ const FALLBACK = {
 export function makeAi(apiKey = process.env.ANTHROPIC_API_KEY): Ai {
   if (!apiKey) return { understand: null, find: sampleFind, live: false };
   const client = new Anthropic({ apiKey });
-  return { understand: claudeUnderstand(client), find: claudeFind(client), live: true };
+  return { understand: claudeUnderstand(client), find: claudeFind(client), trade: claudeTrade(client), live: true };
 }
 
 /* ---------------------------- understand ---------------------------- */
@@ -89,6 +92,26 @@ function claudeUnderstand(client: Anthropic): Understand {
     if (response.stop_reason === "refusal") return null;
     const command = response.parsed_output?.command?.trim();
     return command ? command : null;
+  };
+}
+
+/* ------------------------------- trade ------------------------------- */
+
+const TradeAnswer = z.object({ trade: z.enum(TRADE_LABELS as [string, ...string[]]).nullable() });
+
+function claudeTrade(client: Anthropic): TradeReader {
+  return async (problem) => {
+    const response = await client.beta.messages.parse({
+      model: MODEL,
+      max_tokens: 1024,
+      ...FALLBACK,
+      output_config: { effort: "low", format: betaZodOutputFormat(TradeAnswer) },
+      system:
+        "A tenant texted their landlord about a problem in their rental. Pick the one kind of repair person who should come first. Use handyman for small general jobs (doors, shelves, patching). Answer null if it isn't a repair, or you truly can't tell.",
+      messages: [{ role: "user", content: `<message>${problem}</message>` }],
+    });
+    if (response.stop_reason === "refusal") return null;
+    return response.parsed_output?.trade ?? null;
   };
 }
 

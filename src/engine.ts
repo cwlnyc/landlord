@@ -88,14 +88,19 @@ const HELP = [
 ].join("\n");
 
 /** One incoming text. Returns the texts to send back out. */
-export function handleText(state: State, from: string, body: string, now: Date): Outbound[] {
+export type TextHints = {
+  /** The trade a new repair needs, when the AI read it ("burning smell" -> HVAC). */
+  trade?: string | null;
+};
+
+export function handleText(state: State, from: string, body: string, now: Date, hints: TextHints = {}): Outbound[] {
   const text = body.trim();
   const landlord = landlordOf(state, from);
   if (landlord) return fromLandlord(state, landlord, text, now);
   const vendor = vendorFrom(state, from);
   if (vendor) return fromVendor(state, vendor, text, now);
   const unit = unitFrom(state, from);
-  if (unit) return fromTenant(state, unit, text, now);
+  if (unit) return fromTenant(state, unit, text, now, hints);
   return [{ to: from, body: "Sorry, this number isn't set up. Please text your landlord directly." }];
 }
 
@@ -172,7 +177,21 @@ function isRefusal(text: string) {
   return isNo(text) && !mentionsTime(text);
 }
 
-function fromTenant(state: State, unit: Unit, text: string, now: Date): Outbound[] {
+/** Whether a tenant's text will start a new repair (not a reply, not rent). */
+export function isNewRepair(state: State, from: string, body: string): boolean {
+  const unit = unitFrom(state, from);
+  if (!unit || landlordOf(state, from) || vendorFrom(state, from)) return false;
+  const text = body.trim();
+  const waiting = state.repairs.some((r) => r.unitId === unit.id && r.status === "asking-tenant");
+  return !(waiting && (isYes(text) || isNo(text))) && !isRentText(text);
+}
+
+/** The trade a repair needs: what the AI or the words said, else a guess from its text. */
+export function needOf(repair: Repair): string | null {
+  return repair.trade ?? tradeForProblem(repair.text);
+}
+
+function fromTenant(state: State, unit: Unit, text: string, now: Date, hints: TextHints = {}): Outbound[] {
   const waiting = state.repairs.find(
     (r) => r.unitId === unit.id && r.status === "asking-tenant",
   );
@@ -187,6 +206,7 @@ function fromTenant(state: State, unit: Unit, text: string, now: Date): Outbound
     text,
     status: "new",
     createdAt: now.toISOString(),
+    ...(tradeForProblem(text) ?? hints.trade ? { trade: (tradeForProblem(text) ?? hints.trade)! } : {}),
   };
   state.repairs.push(repair);
   return [
@@ -205,20 +225,58 @@ function fromTenant(state: State, unit: Unit, text: string, now: Date): Outbound
  * "Send Sam (HVAC)? Reply YES" when someone fits, else how to pick or
  * search. Remembers the suggestion so a bare YES means it.
  */
+/** "plumber" -> "plumbers", "HVAC" -> "HVAC companies". */
+function plural(trade: string): string {
+  const special: Record<string, string> = {
+    HVAC: "HVAC companies",
+    handyman: "handymen",
+    cleaning: "cleaners",
+    appliance: "appliance repair shops",
+    locksmith: "locksmiths",
+  };
+  return special[trade] ?? `${trade}s`;
+}
+
+/** What `repair.suggested` holds when the suggestion is a web search. */
+export const SUGGEST_SEARCH = "FIND";
+
 function suggest(state: State, repair: Repair): string {
   const unit = unitOf(state, repair);
-  const need = tradeForProblem(repair.text);
-  const pick = pickVendor(state.vendors, repair.text, townOf(unit), repair.tried);
+  const need = needOf(repair);
+  const town = townOf(unit);
+  const pick = pickVendor(state.vendors, need, town, repair.tried);
   const others = textable(state).filter((v) => v.code !== pick?.code && !repair.tried?.includes(v.code));
-  const find = `FIND ${need ?? "+ a trade"} to search near ${townOf(unit)}`;
   if (pick) {
     repair.suggested = pick.code;
-    const alt = others.length ? `, SEND + someone else (${others.map((v) => v.code).join(", ")})` : "";
-    return `Send ${pick.name} (${pick.trade})? Reply YES${alt}, or ${find}.`;
+    const alt = others.length ? ` Or SEND + someone else (${others.map((v) => v.code).join(", ")}).` : "";
+    return `Send ${pick.name} (${pick.trade})? Reply YES.${alt}`;
+  }
+  const who = others.length ? ` Or SEND + someone (${others.map((v) => v.code).join(", ")}).` : "";
+  if (need) {
+    // Nobody saved fits: the next step is a search, one YES away.
+    repair.suggested = SUGGEST_SEARCH;
+    const lead = repair.tried?.length ? `No one else saved does ${need} work.` : `No saved ${need} for this.`;
+    return `${lead} Search for ${plural(need)} near ${town}? Reply YES.${who}`;
   }
   delete repair.suggested;
-  const who = others.length ? `SEND + who to ask (${others.map((v) => v.code).join(", ")}), or ` : "";
-  return `${need ? `No saved repair person for this (${need}). ` : ""}Reply ${who}${find}.`;
+  return `What kind of repair person? Reply FIND + the trade (e.g. FIND ELECTRICIAN) to search near ${town}.${who}`;
+}
+
+/**
+ * When a landlord's YES means "search": the FIND command it stands for
+ * (e.g. "FIND plumber #3"), so the caller can run the search. Else null.
+ */
+export function searchFromYes(state: State, from: string, body: string): string | null {
+  if (!landlordOf(state, from)) return null;
+  const [word = "", idWord] = body.trim().split(/\s+/);
+  if (!YES_WORDS.includes(word.toUpperCase().replace(/[^A-Z]/g, ""))) return null;
+  const id = idArg(idWord);
+  const repair = Number.isNaN(id)
+    ? [...state.repairs].reverse().find((r) => r.status === "new" && r.suggested)
+    : state.repairs.find((r) => r.id === id && r.status === "new" && r.suggested);
+  if (!repair || repair.suggested !== SUGGEST_SEARCH) return null;
+  delete repair.suggested;
+  return `FIND ${needOf(repair)} #${repair.id}`;
 }
 
 function tenantConfirms(state: State, repair: Repair, now: Date): Outbound[] {
@@ -497,7 +555,7 @@ export function planFind(state: State, text: string, from?: string): FindPlan | 
   // What they said, else who was asked before, else what the problem needs
   // ("sink leaking" is a plumber): only ask when none of those says.
   const trade =
-    words.filter((w) => w !== idWord).join(" ") || vendorOf(state, repair)?.trade || tradeForProblem(repair.text) || "";
+    words.filter((w) => w !== idWord).join(" ") || vendorOf(state, repair)?.trade || needOf(repair) || "";
   if (!trade) {
     // Remember the question, so a bare "plumber" next is read as the answer.
     if (from) state.pendingFind = { ...state.pendingFind, [digits(from)]: repair.id };

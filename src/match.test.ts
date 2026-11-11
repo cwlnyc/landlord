@@ -18,6 +18,8 @@ it.each([
   ["outlet sparking", "electrician"],
   ["fridge stopped cooling", "appliance"],
   ["front door sticks", null],
+  ["my waters not working", "plumber"],
+  ["no water in the bathroom", "plumber"],
 ])("%s needs %s", (problem, trade) => {
   expect(tradeForProblem(problem)).toBe(trade);
 });
@@ -25,19 +27,19 @@ it.each([
 describe("pickVendor", () => {
   const all = [SAM, JOHN, ROB, MIKE];
   it("matches the trade", () => {
-    expect(pickVendor(all, "heat not working", "Naugatuck")?.code).toBe("SAM");
-    expect(pickVendor(all, "sink leaking", "Hamden")?.code).toBe("MIKE");
+    expect(pickVendor(all, tradeForProblem("heat not working"), "Naugatuck")?.code).toBe("SAM");
+    expect(pickVendor(all, tradeForProblem("sink leaking"), "Hamden")?.code).toBe("MIKE");
   });
   it("prefers someone in the rental's town", () => {
-    expect(pickVendor(all, "door sticks", "Tolland")?.code).toBe("ROB");
-    expect(pickVendor(all, "door sticks", "Hamden")?.code).toBe("JOHN");
+    expect(pickVendor(all, tradeForProblem("door sticks"), "Tolland")?.code).toBe("ROB");
+    expect(pickVendor(all, tradeForProblem("door sticks"), "Hamden")?.code).toBe("JOHN");
   });
   it("never offers a handyman for a specialist job", () => {
-    expect(pickVendor([JOHN, ROB], "furnace out", "Hamden")).toBeUndefined();
+    expect(pickVendor([JOHN, ROB], tradeForProblem("furnace out"), "Hamden")).toBeUndefined();
   });
   it("skips people who said no, and businesses found by search", () => {
-    expect(pickVendor(all, "door sticks", "Hamden", ["JOHN"])?.code).toBe("ROB");
-    expect(pickVendor([v("VALLEY", "HVAC", "Naugatuck", false)], "no heat", "Naugatuck")).toBeUndefined();
+    expect(pickVendor(all, tradeForProblem("door sticks"), "Hamden", ["JOHN"])?.code).toBe("ROB");
+    expect(pickVendor([v("VALLEY", "HVAC", "Naugatuck", false)], tradeForProblem("no heat"), "Naugatuck")).toBeUndefined();
   });
 });
 

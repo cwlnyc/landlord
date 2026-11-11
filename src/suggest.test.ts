@@ -24,7 +24,7 @@ describe("the bot suggests who to send", () => {
   it("heat problem: 'Send Sam?', and YES sends him", () => {
     const s = fresh();
     const out = handleText(s, MARIA, "heat not working", NOW);
-    expect(to(out, MOM)[0]).toMatch(/Send Sam \(HVAC\)\? Reply YES, SEND \+ someone else \(JOHN, TOLLAND\), or FIND HVAC to search near Naugatuck\./);
+    expect(to(out, MOM)[0]).toMatch(/Send Sam \(HVAC\)\? Reply YES\. Or SEND \+ someone else \(JOHN, TOLLAND\)\./);
     const yes = handleText(s, MOM, "yes", NOW);
     expect(to(yes, SAM)[0]).toMatch(/heat not working/);
     expect(s.repairs[0]!.status).toBe("asking-vendor");
@@ -46,14 +46,17 @@ describe("the bot suggests who to send", () => {
     expect(to(out, MOM)[0]).toMatch(/Rob can't do #1.*Send John \(handyman\)\? Reply YES/);
     handleText(s, MOM, "yes", NOW);
     out = handleText(s, "+1 203 555 0302", "no", NOW);
-    expect(to(out, MOM)[0]).toMatch(/John can't do #1.*Reply SEND \+ who to ask \(HVAC\), or FIND \+ a trade to search near Tolland/);
+    // A door is handyman work with no search trade, so it asks what kind.
+    expect(to(out, MOM)[0]).toMatch(/John can't do #1.*What kind of repair person\? Reply FIND \+ the trade.*near Tolland\. Or SEND \+ someone \(HVAC\)\./);
   });
 
   it("no one saved fits: says so and offers FIND", () => {
     const s = fresh();
     const out = handleText(s, MARIA, "outlet sparking in kitchen", NOW);
-    expect(to(out, MOM)[0]).toMatch(/No saved repair person for this \(electrician\)\..*FIND electrician to search near Naugatuck/);
-    expect(to(handleText(s, MOM, "yes", NOW), MOM)[0]).toMatch(/nothing waiting on a yes/);
+    expect(to(out, MOM)[0]).toMatch(/No saved electrician for this\. Search for electricians near Naugatuck\? Reply YES\./);
+    // That YES is a search: handled before the engine (receive), so the
+    // engine alone has nothing to send.
+    expect(s.repairs[0]!.suggested).toBe("FIND");
   });
 
   it("NO keeps the repair waiting and shows the options", () => {

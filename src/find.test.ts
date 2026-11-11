@@ -32,7 +32,7 @@ function samSaysNo(s: State) {
 describe("FIND and BOOKED: when the usual person can't come", () => {
   it("offers FIND when the repair person says no", () => {
     const s = fresh();
-    expect(to(samSaysNo(s), MOM)[0]).toMatch(/FIND HVAC to search near Naugatuck/);
+    expect(to(samSaysNo(s), MOM)[0]).toMatch(/Sam can't do #1.*No one else saved does HVAC work\. Search for HVAC companies near Naugatuck\? Reply YES\./);
   });
 
   it("plans a search for the right repair, trade and town", () => {
@@ -223,5 +223,59 @@ describe("FIND in context (from the family test)", () => {
     s.lastSent = { "2035550101": "Send Sam (HVAC)? Reply YES, or FIND HVAC to search near Naugatuck." };
     const help = needsHelp(s, MOM, "go ahead with him", SUNDAY_9PM);
     expect(help!.context).toMatch(/The last text the line sent them[^]*Send Sam \(HVAC\)\?/);
+  });
+});
+
+describe("the landlord does the least work (Dad's wish)", () => {
+  function withPlumber() {
+    const s = fresh();
+    s.vendors.push({ code: "PLUMBER", name: "Test Plumber", trade: "plumber", town: "all", phone: "+1 203 555 0399" });
+    s.welcomed!.push("2035550399");
+    return s;
+  }
+  const PLUMBER = "+1 203 555 0399";
+
+  it("'my waters not working' -> Send Test Plumber? YES -> they can't -> Search? YES -> results", async () => {
+    const s = withPlumber();
+    let { out } = await receive(s, MARIA, "my waters not working", SUNDAY_9PM, offline);
+    expect(to(out, MOM)[0]).toMatch(/Send Test Plumber \(plumber\)\? Reply YES\./);
+
+    ({ out } = await receive(s, MOM, "yes", SUNDAY_9PM, offline));
+    expect(to(out, PLUMBER)[0]).toMatch(/my waters not working/);
+
+    ({ out } = await receive(s, PLUMBER, "no sorry", SUNDAY_9PM, offline));
+    expect(to(out, MOM)[0]).toMatch(/Test Plumber can't do #1.*No one else saved does plumber work\. Search for plumbers near Naugatuck\? Reply YES\./);
+
+    ({ out } = await receive(s, MOM, "yes", SUNDAY_9PM, offline));
+    expect(to(out, MOM)[0]).toMatch(/^Looking for plumber near Naugatuck for #1 now/);
+    expect(to(out, MOM)[1]).toMatch(/PLUMBER near Naugatuck for #1:\n1\./);
+  });
+
+  it("the AI picks the trade when the words don't say", async () => {
+    const s = fresh();
+    s.vendors.push({ code: "SPARKY", name: "Sparky", trade: "electrician", town: "all", phone: "+1 203 555 0398" });
+    s.welcomed!.push("2035550398");
+    const ai: Ai = { understand: null, find: sampleFind, live: true, trade: async () => "electrician" };
+    const { out } = await receive(s, MARIA, "half the apartment went dark", SUNDAY_9PM, ai);
+    expect(to(out, MOM)[0]).toMatch(/Send Sparky \(electrician\)\? Reply YES\./);
+    expect(s.repairs[0]!.trade).toBe("electrician");
+  });
+
+  it("the AI isn't asked when the words already say, or for rent and replies", async () => {
+    const s = withPlumber();
+    let asked = 0;
+    const ai: Ai = { understand: null, find: sampleFind, live: true, trade: async () => (asked++, "HVAC") };
+    await receive(s, MARIA, "toilet is clogged", SUNDAY_9PM, ai);
+    await receive(s, MARIA, "sent the rent on zelle", SUNDAY_9PM, ai);
+    expect(asked).toBe(0);
+    expect(s.repairs[0]!.trade).toBe("plumber");
+  });
+
+  it("if the AI is down, the repair still goes through", async () => {
+    const s = fresh();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const ai: Ai = { understand: null, find: sampleFind, live: true, trade: async () => { throw new Error("529"); } };
+    const { out } = await receive(s, MARIA, "half the apartment went dark", SUNDAY_9PM, ai);
+    expect(to(out, MOM)[0]).toMatch(/New repair #1/);
   });
 });

@@ -11,7 +11,7 @@ type Trade = { label: string; aliases: string[]; problems?: RegExp };
 // Order matters: the first trade whose problem words match wins.
 const TRADES: Trade[] = [
   // Before HVAC, so "water heater" isn't read as "heater".
-  { label: "plumber", aliases: ["plumber", "plumbing"], problems: /\b(water heater|hot water|leak\w*|sink|toilet|drain\w*|clog\w*|pipes?|faucet|shower|tub|sewer|backed up)\b/ },
+  { label: "plumber", aliases: ["plumber", "plumbing"], problems: /\b(water heater|hot water|no water|water|waters|leak\w*|sink|toilet|drain\w*|clog\w*|pipes?|faucet|shower|tub|sewer|backed up|drip\w*|flood\w*)\b/ },
   { label: "HVAC", aliases: ["hvac", "heating", "furnace", "boiler", "ac", "cooling"], problems: /\b(heat|heater|heating|furnace|boiler|radiators?|thermostat|a\/?c|air ?condition\w*|cold)\b/ },
   { label: "electrician", aliases: ["electrician", "electric", "electrical"], problems: /\b(outlets?|power|breakers?|spark\w*|electric\w*|switch\w*|wiring|lights?)\b/ },
   { label: "roofer", aliases: ["roofer", "roofing", "roof"], problems: /\b(roof\w*|gutters?|shingles?)\b/ },
@@ -20,6 +20,9 @@ const TRADES: Trade[] = [
   { label: "cleaning", aliases: ["cleaning", "cleaner", "cleaners", "cleaner's"] },
   { label: "handyman", aliases: ["handyman", "handy", "maintenance"] },
 ];
+
+/** Every trade the line knows, for the AI to choose from. */
+export const TRADE_LABELS = TRADES.map((t) => t.label);
 
 /** "HVAC guy" -> "HVAC", "Plumbing" -> "plumber"; null if no trade word. */
 export function tradeLabel(text: string): string | null {
@@ -47,11 +50,11 @@ function servesTown(v: Vendor, town: string): boolean {
  */
 export function pickVendor(
   vendors: Vendor[],
-  problem: string,
+  /** The trade the job needs ("plumber"), or null when it's handyman work or unknown. */
+  need: string | null,
   town: string,
   skip: string[] = [],
 ): Vendor | undefined {
-  const need = tradeForProblem(problem);
   const pool = vendors.filter((v) => !skip.includes(v.code) && v.textable !== false);
   const fits = (v: Vendor) => {
     const theirs = tradeLabel(v.trade) ?? v.trade.toLowerCase();

@@ -49,12 +49,17 @@ either can reply.
 
 ### Who to send
 
-Each new repair comes with a suggestion: "heat not working" is an HVAC job,
-"sink leaking" a plumber's, a sticking door a handyman's (`src/match.ts`,
-plain keywords). It prefers someone who covers the rental's town, never
-offers a handyman for a specialist job, and skips anyone who already said
-no. The landlord answers YES and it's sent. When nobody saved fits, it says
-so and offers `FIND`.
+The goal: the landlord's whole job is answering YES. Each new repair comes
+with a suggestion: "heat not working" is an HVAC job, "my water's not
+working" a plumber's, a sticking door a handyman's (`src/match.ts`
+keywords; when they can't tell, Claude picks the trade). It prefers someone
+who covers the rental's town, never offers a handyman for a specialist job,
+and skips anyone who already said no.
+
+- "Send Sam (HVAC)? Reply YES" → Sam is asked.
+- Sam can't → the next saved person who fits, again one YES away.
+- Nobody left → "Search for HVAC companies near Naugatuck? Reply YES" →
+  "Looking for… now" → a list of businesses to call.
 
 ### Adding repair people
 

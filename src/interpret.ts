@@ -1,6 +1,7 @@
 import type { Ai } from "./ai.js";
 import { handleKeyword, prepareOutbound } from "./compliance.js";
-import { LANDLORD_COMMANDS, handleText, needsHelp, planFind, showFound, digits } from "./engine.js";
+import { LANDLORD_COMMANDS, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits } from "./engine.js";
+import { tradeForProblem } from "./match.js";
 import type { Outbound, State } from "./types.js";
 
 /**
@@ -67,7 +68,11 @@ async function respond(
   }
   let understoodAs: string | undefined;
 
-  const help = needsHelp(state, from, text, now);
+  // "Search for plumbers? Reply YES": that YES runs the search.
+  const search = searchFromYes(state, from, text);
+  if (search) text = search;
+
+  const help = search ? null : needsHelp(state, from, text, now);
   if (help && ai.understand) {
     try {
       const command = await ai.understand({ ...help, text, now });
@@ -95,5 +100,15 @@ async function respond(
     }
   }
 
-  return { out: handleText(state, from, text, now), understoodAs };
+  // A new repair the keywords can't place ("burning smell from the vent"):
+  // the AI picks the trade, so the landlord still gets "Send ___? YES".
+  let trade: string | null = null;
+  if (ai.trade && isNewRepair(state, from, text) && !tradeForProblem(text)) {
+    try {
+      trade = await ai.trade(text);
+    } catch (error) {
+      console.error("trade failed:", error);
+    }
+  }
+  return { out: handleText(state, from, text, now, { trade }), understoodAs };
 }
