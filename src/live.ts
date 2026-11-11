@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { makeAi } from "./ai.js";
 import { digits, tick } from "./engine.js";
+import { prepareOutbound } from "./compliance.js";
 import { receive } from "./interpret.js";
 import { findCloudflared, startTunnel } from "./tunnel.js";
 import { EMPTY_TWIML, isFromTwilio, readInbound, sendSms, setWebhook, toE164, type TwilioConfig } from "./twilio.js";
@@ -105,9 +106,6 @@ const serial = (job: () => Promise<void>) => {
   return queue;
 };
 
-// Carrier and Twilio keywords. Twilio handles opting out and back in;
-// they must not become a "repair" or a command.
-const KEYWORDS = /^(stop|stopall|unsubscribe|cancel|end|quit|start|unstop|help|info)$/i;
 
 const server = createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/health") {
@@ -134,8 +132,7 @@ const server = createServer(async (req, res) => {
   await serial(async () => {
     const { from, text } = await readInbound(cfg, params);
     console.log(`<- ${from}: ${text.split("\n")[0]}`);
-    if (KEYWORDS.test(text.trim())) return;
-    const { out, understoodAs } = await receive(state, from, text, new Date(), ai);
+    const { out, understoodAs } = await receive(state, from, text, new Date(), ai, true);
     if (understoodAs) console.log(`   AI read it as: ${understoodAs}`);
     save();
     await deliver(out);
@@ -178,7 +175,7 @@ server.listen(PORT, () => {
 
 setInterval(() => {
   void serial(async () => {
-    const out = tick(state, new Date());
+    const out = prepareOutbound(state, tick(state, new Date()), new Date());
     if (out.length) {
       save();
       await deliver(out);

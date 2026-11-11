@@ -11,8 +11,12 @@ const SUNDAY_9PM = new Date(2026, 10, 8, 21, 0); // Sun Nov 8 2026
 
 function fresh(): State {
   const s: State = JSON.parse(readFileSync(new URL("../data/example.json", import.meta.url), "utf8"));
-  // Repairs only here; rent.test.ts covers rent.
+  // Repairs only here; rent.test.ts covers rent, compliance.test.ts the
+  // first-text welcome (so here everyone has had it).
   for (const u of s.units) delete u.rent;
+  s.welcomed = [...s.landlords.map((l) => l.phone), ...s.units.map((u) => u.tenant.phone), ...s.vendors.map((v) => v.phone)].map(
+    (p) => p.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, ""),
+  );
   return s;
 }
 const to = (out: Outbound[], phone: string) => out.filter((o) => o.to === phone).map((o) => o.body);

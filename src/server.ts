@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { makeAi } from "./ai.js";
 import { tick } from "./engine.js";
+import { prepareOutbound } from "./compliance.js";
 import { receive } from "./interpret.js";
 import type { Outbound, State } from "./types.js";
 
@@ -81,7 +82,7 @@ createServer(async (req, res) => {
     // In the terminal only: the bot's reply already shows what it understood.
     if (understoodAs) console.log(`AI read "${text}" as: ${understoodAs}`);
     record(out);
-    record(tick(saved.state, now()));
+    record(prepareOutbound(saved.state, tick(saved.state, now()), now()));
     save();
     return json({ ok: true });
   }
@@ -92,7 +93,7 @@ createServer(async (req, res) => {
     const steps = Math.max(0, Math.min(24 * 60, Math.round(Number(hours ?? 0))));
     for (let i = 0; i < steps; i++) {
       saved.clockOffsetMs += 60 * 60 * 1000;
-      record(tick(saved.state, now()));
+      record(prepareOutbound(saved.state, tick(saved.state, now()), now()));
     }
     save();
     return json({ ok: true });

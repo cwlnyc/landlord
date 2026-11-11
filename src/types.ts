@@ -89,6 +89,12 @@ export type State = {
   rentSince?: string;
   /** Rent texts already sent, by "unitId|2026-11". */
   rentNotices?: Record<string, string[]>;
+  /** Numbers (digits) that texted STOP. Never texted until they text START. */
+  optedOut?: string[];
+  /** Numbers that got the first-text explanation (who, why, how to stop). */
+  welcomed?: string[];
+  /** How and when each number agreed or opted out, kept as a record. */
+  consent?: Record<string, { at: string; how: string }>;
   /** Defaults: remind 3 days before, late notice 5 days after, at 9am. */
   rentSettings?: { remindDaysBefore?: number; graceDays?: number; hour?: number };
 };

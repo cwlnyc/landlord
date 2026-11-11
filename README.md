@@ -171,6 +171,40 @@ What `live` does to stay safe:
 - Leaves STOP, START, HELP and the other carrier keywords to Twilio.
 - `ALLOW_ONLY` logs every other text instead of sending it.
 
+## Staying legal
+
+Unwanted texts can cost $500 to $1,500 each under the TCPA, so the rules are
+in the code, applied to every text the simulator and the live line send
+(`src/compliance.ts`, tested in `src/compliance.test.ts`):
+
+- **Consent.** Only people a landlord added after they agreed, or who
+  texted the line themselves, are ever texted.
+- **First text explains everything:** who it's from, what for, frequency,
+  "Msg & data rates may apply", HELP and STOP. Sent once, recorded.
+- **STOP works instantly** (also UNSUBSCRIBE, CANCEL, END, QUIT): nothing
+  more until START, and the landlord is told to reach them directly. On the
+  live line Twilio sends the confirmation; the line records it.
+- **No automatic texts 9pm to 8am.** Reminders and check-backs wait for
+  morning. Replies to someone who just texted go out right away.
+- **Records:** when each person was added, welcomed, opted out or back in.
+- Landlords use **DROP 3**, not CANCEL: "cancel" alone is a carrier
+  opt-out word and would turn the line off for them.
+
+**Legal pages** (privacy policy, terms of service, SMS terms, how people opt
+in, with the real sample messages) are templates in `legal/build.mjs`, filled
+from `legal/config.json`. Fill in the TODOs (the operator must be an adult
+or a business), then:
+
+```bash
+npm run legal              # builds legal-site/ to look at
+npm run legal:publish      # puts it on https://repairline-legal.pages.dev
+```
+
+Twilio's registration asks for the privacy policy and opt-in description
+URLs that `legal:publish` prints. A test checks the sample messages on the
+pages match what the code really sends. **These are templates, not legal
+advice: have a lawyer review them before charging customers.**
+
 ## Layout
 
 ```
@@ -183,6 +217,8 @@ src/live.ts        the real line: Twilio webhook in, real texts out, reminders e
 src/twilio.ts      signature check, reading a text (and shared contact cards), sending, setting the webhook
 src/tunnel.ts      starts a Cloudflare quick tunnel and reads its address
 src/check.ts       npm run check: what's wrong before a live test
+src/compliance.ts  STOP/START/HELP, first-text welcome, quiet hours, consent records
+legal/             privacy policy, terms, SMS terms, opt-in page; npm run legal(:publish)
 src/parse-time.ts  reads "tue 9am" style times; returns null rather than guess
 src/server.ts      the simulator's local server and fake clock
 public/index.html  the three-phone page

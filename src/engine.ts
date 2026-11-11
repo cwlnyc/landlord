@@ -1,5 +1,6 @@
 import { pickVendor, readContactCard, readContactName, tradeForProblem, tradeLabel } from "./match.js";
 import { formatSlot, mentionsTime, parseVisitTime } from "./parse-time.js";
+import { isQuietHour } from "./compliance.js";
 import { isRentText, landlordPaid, rentStatus, setRent, tenantRentText, tickRent } from "./rent.js";
 import type { Found, Outbound, Person, Repair, State, Unit, Vendor } from "./types.js";
 
@@ -27,7 +28,7 @@ const HOUR = 60 * 60 * 1000;
 
 const YES_WORDS = ["YES", "Y", "YEP", "YEAH", "YA", "OK", "OKAY", "SURE", "K"];
 const NO_WORDS = ["NO", "N", "NOPE", "NAH"];
-export const LANDLORD_COMMANDS = ["SEND", "LIST", "STATUS", "DONE", "CANCEL", "FIND", "BOOKED", "HELP", "PAID", "RENT", ...YES_WORDS, ...NO_WORDS];
+export const LANDLORD_COMMANDS = ["SEND", "LIST", "STATUS", "DONE", "CANCEL", "DROP", "FIND", "BOOKED", "HELP", "PAID", "RENT", ...YES_WORDS, ...NO_WORDS];
 
 export function digits(phone: string): string {
   return phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
@@ -80,7 +81,7 @@ const HELP = [
   "BOOKED 1 TUE 9AM = you booked result 1 (or BOOKED JOHN TUE 9AM)",
   "LIST = open repairs",
   "DONE 3 = mark #3 fixed",
-  "CANCEL 3 = drop #3",
+  "DROP 3 = drop #3 (never text just CANCEL or STOP: that turns this line off for you)",
   "PAID MARIA = Maria's rent came in (PAID MARIA 600 CASH for part of it)",
   "RENT = who's paid this month (RENT MARIA 1200 DUE 1 sets Maria's rent)",
   "To add a repair person, share their contact card with this number.",
@@ -421,6 +422,8 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
     return reply(open.map((r) => describe(state, r)).join("\n"));
   }
 
+  // "CANCEL" alone is a carrier opt-out word, so DROP is the safer name.
+  if (command === "DROP") return fromLandlord(state, landlord, `CANCEL ${rest.join(" ")}`, now);
   if (command === "DONE" || command === "CANCEL") {
     const id = idArg(rest[0]);
     const repair = state.repairs.find((r) => r.id === id && OPEN.includes(r.status));
@@ -602,6 +605,8 @@ function describe(state: State, r: Repair): string {
  */
 export function tick(state: State, now: Date): Outbound[] {
   const out: Outbound[] = [];
+  // Automatic texts wait for daytime; everything here is retried each tick.
+  if (isQuietHour(now)) return out;
   for (const r of state.repairs) {
     if (r.status !== "confirmed" || !r.slot) continue;
     const at = new Date(r.slot).getTime();

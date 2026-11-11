@@ -1,0 +1,9 @@
+{
+  "_read_me": "Fill in every TODO, then: npm run legal (preview in legal-site/) and npm run legal:publish. The operator must be an adult or a business (your dad, or an LLC), since a minor can't be held to a contract. Have a lawyer review the pages before charging customers.",
+  "productName": "Repair Line",
+  "operator": "TODO: legal name of the person or business that runs this (e.g. your dad's name, or the LLC)",
+  "contactEmail": "TODO: an email address you check",
+  "state": "Connecticut",
+  "effectiveDate": "TODO: the date you publish, e.g. November 12, 2026",
+  "pagesProject": "repairline-legal"
+}
