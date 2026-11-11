@@ -146,10 +146,45 @@ function rentLine(state: State, now: Date): string {
   return `${paid.length} of ${units.length} paid.`;
 }
 
+/**
+ * RENT MARIA 1200 [DUE 15]: sets a unit's rent by text, so nobody has to
+ * edit the data file. The due day defaults to the 1st.
+ */
+export function setRent(state: State, landlord: Person, args: string[]): Outbound[] {
+  const reply = (body: string): Outbound[] => [{ to: landlord.phone, body }];
+  const [who = "", ...rest] = args;
+  const w = who.toLowerCase();
+  const unit = state.units.find(
+    (u) => u.id.toLowerCase() === w || u.tenant.name.toLowerCase() === w || u.tenant.name.toLowerCase().split(/\s+/)[0] === w,
+  );
+  const names = state.units.map((u) => u.tenant.name.split(/\s+/)[0]!.toUpperCase()).join(", ");
+  if (!unit) return reply(`Whose rent? Reply RENT + name + amount, e.g. RENT ${names.split(", ")[0] ?? "MARIA"} 1200. Tenants: ${names}`);
+  const amountWord = rest.find((x) => /^\$?\d[\d,]*(\.\d+)?$/.test(x));
+  const amount = amountWord ? Number(amountWord.replace(/[$,]/g, "")) : NaN;
+  if (!(amount > 0)) return reply(`How much is ${unit.tenant.name}'s rent? e.g. RENT ${unit.tenant.name.split(/\s+/)[0]!.toUpperCase()} 1200`);
+  const dueWord = rest.slice(rest.indexOf(amountWord!) + 1).find((x) => /^\d{1,2}(st|nd|rd|th)?$/i.test(x));
+  const due = dueWord ? Number(dueWord.replace(/\D/g, "")) : (unit.rentDue ?? 1);
+  if (due < 1 || due > 31) return reply("The due day should be 1 to 31, e.g. RENT MARIA 1200 DUE 15");
+  unit.rent = amount;
+  unit.rentDue = due;
+  const s = settings(state);
+  return reply(
+    `Set ${unit.tenant.name}'s rent: ${money(amount)}, due the ${ordinal(due)}. I'll remind them ${s.remindDaysBefore} days before, and tell you if it isn't marked paid ${s.graceDays} days after. Let them know these texts are coming.`,
+  );
+}
+
+function ordinal(n: number): string {
+  const end = n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th";
+  return `${n}${end}`;
+}
+
 /** RENT: who's paid for the month in play. */
 export function rentStatus(state: State, now: Date): string {
   const units = rentUnits(state);
-  if (units.length === 0) return "No rents set up yet. Add \"rent\" and \"rentDue\" to each unit in the data file.";
+  if (units.length === 0) {
+    const first = state.units[0]?.tenant.name.split(/\s+/)[0]?.toUpperCase() ?? "MARIA";
+    return `No rents set up yet. Text RENT + name + amount, e.g. RENT ${first} 1200 (due the 1st), or RENT ${first} 1200 DUE 15.`;
+  }
   const since = new Date((state.rentSince ??= now.toISOString()));
   const lines = units.map((u) => {
     const { period, due } = currentPeriod(u, now);

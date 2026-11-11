@@ -1,6 +1,6 @@
 import { pickVendor, readContactCard, readContactName, tradeForProblem, tradeLabel } from "./match.js";
 import { formatSlot, mentionsTime, parseVisitTime } from "./parse-time.js";
-import { isRentText, landlordPaid, rentStatus, tenantRentText, tickRent } from "./rent.js";
+import { isRentText, landlordPaid, rentStatus, setRent, tenantRentText, tickRent } from "./rent.js";
 import type { Found, Outbound, Person, Repair, State, Unit, Vendor } from "./types.js";
 
 /**
@@ -82,7 +82,7 @@ const HELP = [
   "DONE 3 = mark #3 fixed",
   "CANCEL 3 = drop #3",
   "PAID MARIA = Maria's rent came in (PAID MARIA 600 CASH for part of it)",
-  "RENT = who's paid this month",
+  "RENT = who's paid this month (RENT MARIA 1200 DUE 1 sets Maria's rent)",
   "To add a repair person, share their contact card with this number.",
 ].join("\n");
 
@@ -377,7 +377,7 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
   }
 
   if (command === "PAID") return landlordPaid(state, landlord, rest, now);
-  if (command === "RENT") return reply(rentStatus(state, now));
+  if (command === "RENT") return rest.length ? setRent(state, landlord, rest) : reply(rentStatus(state, now));
 
   if (YES_WORDS.includes(command) || NO_WORDS.includes(command)) {
     const id = idArg(rest[0]);

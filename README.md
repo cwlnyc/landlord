@@ -92,8 +92,9 @@ fixed replies still work, and `FIND` shows sample results marked as such.
 
 ### Rent reminders
 
-Give a unit `"rent": 1450` and `"rentDue": 1` (day of the month; 31 means
-the last day) and the same line keeps track of rent. Tracking only: tenants
+The landlord texts `RENT MARIA 1450` (due the 1st) or `RENT MARIA 1450 DUE 15`
+to set a tenant's rent; it can also go in the data file as `"rent": 1450`,
+`"rentDue": 1` (31 means the last day). Then the same line keeps track of rent. Tracking only: tenants
 pay the way they always have and no money goes through the bot.
 
 - **3 days before it's due, 9am:** the tenant gets a friendly reminder.

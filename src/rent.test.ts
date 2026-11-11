@@ -107,6 +107,22 @@ describe("tenants and rent", () => {
     expect(to(out, MOM)[0]).toMatch(/Whose rent\? Reply PAID \+ their name: MARIA, KEVIN, PRIYA/);
   });
 
+  it("the landlord sets rent by text, and reminders follow", () => {
+    const s = fresh();
+    for (const u of s.units) delete u.rent;
+    let out = handleText(s, MOM, "RENT", at(11, 10));
+    expect(to(out, MOM)[0]).toMatch(/No rents set up yet\. Text RENT \+ name \+ amount, e\.g\. RENT MARIA 1200/);
+    out = handleText(s, MOM, "rent maria $1,450", at(11, 10));
+    expect(to(out, MOM)[0]).toMatch(/Set Maria's rent: \$1,450, due the 1st\. I'll remind them 3 days before/);
+    out = handleText(s, MOM, "RENT KEVIN 1200 DUE 15th", at(11, 10));
+    expect(to(out, MOM)[0]).toMatch(/Set Kevin's rent: \$1,200, due the 15th/);
+    expect(to(handleText(s, MOM, "RENT BOB 900", at(11, 10)), MOM)[0]).toMatch(/Whose rent\?.*Tenants: MARIA, KEVIN, PRIYA/);
+    expect(to(handleText(s, MOM, "RENT KEVIN lots", at(11, 10)), MOM)[0]).toMatch(/How much is Kevin's rent/);
+    // Kevin (due the 15th) is reminded on the 12th; Maria on the 28th.
+    expect(to(tick(s, at(11, 12, 9)), KEVIN)[0]).toMatch(/due Sun, Nov 15/);
+    expect(to(tick(s, at(11, 28, 9)), MARIA)[0]).toMatch(/due Tue, Dec 1/);
+  });
+
   it("units without rent get no reminders", () => {
     const s = fresh();
     for (const u of s.units) delete u.rent;
