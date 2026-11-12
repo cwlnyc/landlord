@@ -35,8 +35,10 @@ export type Understand = (
 ) => Promise<string | null>;
 export type Finder = (plan: FindPlan) => Promise<Found[]>;
 /** Which trade a repair needs, when the keywords can't tell. */
-export type TradeReader = (problem: string) => Promise<string | null>;
-export type Ai = { understand: Understand | null; find: Finder; live: boolean; trade?: TradeReader | null };
+/** What a new repair needs: which trade, and whether someone's needed today. */
+export type Triage = { trade: string | null; urgent: boolean | null };
+export type TriageReader = (problem: string) => Promise<Triage | null>;
+export type Ai = { understand: Understand | null; find: Finder; live: boolean; triage?: TriageReader | null };
 
 // Each job tries the cheap model first and keeps its answer only when it's
 // sure and the answer checks out; otherwise the strong model answers (see
@@ -59,7 +61,7 @@ export function makeAi(apiKey = process.env.ANTHROPIC_API_KEY, log: (line: strin
   return {
     understand: claudeUnderstand(client, router),
     find: claudeFind(client, router, log),
-    trade: claudeTrade(client, router),
+    triage: claudeTriage(client, router),
     live: true,
   };
 }
@@ -137,37 +139,45 @@ function claudeUnderstand(client: Anthropic, router: ModelRouter): Understand {
   };
 }
 
-/* ------------------------------- trade ------------------------------- */
+/* ------------------------------ triage ------------------------------ */
 
-const tradeField = { trade: z.enum(TRADE_LABELS as [string, ...string[]]).nullable() };
-const TRADE_SYSTEM =
-  "A tenant texted their landlord about a problem in their rental. Pick the one kind of repair person who should come first. Use handyman for small general jobs (doors, shelves, patching). Answer null if it isn't a repair, or you truly can't tell.";
+const triageFields = {
+  trade: z.enum(TRADE_LABELS as [string, ...string[]]).nullable(),
+  urgent: z.boolean().nullable(),
+};
+const TRIAGE_SYSTEM = [
+  "A tenant texted their landlord about a problem in their rental.",
+  "trade: the one kind of repair person who should come first. Use handyman for small general jobs (doors, shelves, patching). Null if it isn't a repair, or you truly can't tell.",
+  "urgent: true if someone is needed today, even at night or on a weekend: a safety risk (gas smell, sparks, smoke, no heat in cold weather), damage that spreads if it waits (active leak, flooding, sewage), or the home isn't livable (no water, no power, no heat, locked out, broken entry door or lock). False for things that can wait a day or two (drips, noises, cosmetic damage, slow drains, one appliance acting up). Null if you can't tell.",
+].join(" ");
 
-function claudeTrade(client: Anthropic, router: ModelRouter): TradeReader {
+function claudeTriage(client: Anthropic, router: ModelRouter): TriageReader {
   return async (problem) => {
     const ask = async (model: string, cheap: boolean) => {
-      const schema = cheap ? z.object({ ...tradeField, ...sureField }) : z.object(tradeField);
+      const schema = cheap ? z.object({ ...triageFields, ...sureField }) : z.object(triageFields);
       const response = await client.beta.messages.parse({
         model,
         max_tokens: 1024,
         ...FALLBACK,
         output_config: { effort: "low", format: betaZodOutputFormat(schema) },
-        system: cheap ? `${TRADE_SYSTEM} ${SURE_RULE}` : TRADE_SYSTEM,
+        system: cheap ? `${TRIAGE_SYSTEM} ${SURE_RULE}` : TRIAGE_SYSTEM,
         messages: [{ role: "user", content: `<message>${problem}</message>` }],
       });
       const out = response.stop_reason === "refusal" ? null : response.parsed_output;
       return {
-        value: out?.trade ?? null,
+        value: out ? { trade: out.trade ?? null, urgent: out.urgent ?? null } : null,
         sure: !cheap || (out as { sure?: boolean } | null)?.sure === true,
         costUsd: costOf(model, response.usage),
         model,
       };
     };
     return router.run(
-      "pick a trade",
+      "triage a repair",
       () => ask(CHEAP, CHEAP !== STRONG),
       () => ask(STRONG, false),
-      (trade) => trade !== null,
+      (t) => t !== null && (t.trade !== null || t.urgent !== null),
+      // A spot check agrees when both say the same trade and the same urgency.
+      (a, b) => !!a && !!b && a.trade === b.trade && a.urgent === b.urgent,
     );
   };
 }

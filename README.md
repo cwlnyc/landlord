@@ -118,6 +118,18 @@ Each text goes out once per unit per month. Timings live in
 In the simulator, **+1 week** steps through every hour, so reminders fire on
 their day. Tell tenants about the reminders before turning them on.
 
+### What's urgent
+
+Urgent decides how a search looks: someone who can come now or 24/7, or
+someone open in the next couple of days. For each new repair the AI judges
+it together with the trade (one call): urgent means someone's needed today,
+even at night, for safety ("gas smell", "sparks"), spreading damage
+("active leak", "flooding"), or a home that isn't livable ("it's freezing in
+here", "no water", "locked out"); drips, noises and cosmetic damage can
+wait. Without the AI, or when it can't tell, a word list decides. The
+landlord has the last word: "it can wait", "no rush on 2", "#2 is urgent".
+New repairs that sound urgent say so: "New repair #1 (sounds urgent)".
+
 ### Which model, and what it costs
 
 `src/router.ts` uses the cheapest model that gets each job right:

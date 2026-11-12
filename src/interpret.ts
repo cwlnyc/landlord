@@ -1,6 +1,6 @@
 import type { Ai } from "./ai.js";
 import { handleKeyword, prepareOutbound } from "./compliance.js";
-import { LANDLORD_COMMANDS, bookingFromReply, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, sameReply, usableReply } from "./engine.js";
+import { LANDLORD_COMMANDS, type TextHints, bookingFromReply, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, sameReply, usableReply } from "./engine.js";
 import { tradeForProblem } from "./match.js";
 import { paidFromReply, rentFromWords } from "./rent.js";
 import type { Outbound, State } from "./types.js";
@@ -121,15 +121,17 @@ async function respond(
     }
   }
 
-  // A new repair the keywords can't place ("burning smell from the vent"):
-  // the AI picks the trade, so the landlord still gets "Send ___? YES".
-  let trade: string | null = null;
-  if (ai.trade && isNewRepair(state, from, text) && !tradeForProblem(text)) {
+  // A new repair: the AI judges whether it's urgent ("it's freezing in
+  // here" is; "the heater makes a small noise" isn't), and picks the trade
+  // when the words don't say ("half the apartment went dark").
+  let hints: TextHints = {};
+  if (ai.triage && isNewRepair(state, from, text)) {
     try {
-      trade = await ai.trade(text);
+      const t = await ai.triage(text);
+      if (t) hints = { trade: tradeForProblem(text) ? null : t.trade, urgent: t.urgent };
     } catch (error) {
-      console.error("trade failed:", error);
+      console.error("triage failed:", error);
     }
   }
-  return { out: handleText(state, from, text, now, { trade }), understoodAs };
+  return { out: handleText(state, from, text, now, hints), understoodAs };
 }

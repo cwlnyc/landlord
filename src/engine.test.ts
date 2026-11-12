@@ -26,7 +26,7 @@ describe("the furnace story, by text", () => {
     // 1. Tenant reports. Both parents hear about it.
     let out = handleText(s, MARIA, "heat not working", SUNDAY_9PM);
     expect(to(out, MARIA)[0]).toMatch(/repair #1/);
-    expect(to(out, MOM)[0]).toMatch(/New repair #1 from Maria/);
+    expect(to(out, MOM)[0]).toMatch(/New repair #1 \(sounds urgent\) from Maria/);
     expect(to(out, DAD)).toHaveLength(1);
 
     // 2. Mom picks the HVAC guy.

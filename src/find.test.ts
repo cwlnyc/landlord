@@ -6,6 +6,7 @@ import type { Outbound, State } from "./types.js";
 
 const MOM = "+1 203 555 0101";
 const MARIA = "+1 203 555 0201";
+const KEVIN = "+1 860 555 0202";
 const SAM = "+1 203 555 0301";
 const SUNDAY_9PM = new Date(2026, 10, 8, 21, 0); // Sun Nov 8 2026
 
@@ -257,26 +258,27 @@ describe("the landlord does the least work (Dad's wish)", () => {
     const s = fresh();
     s.vendors.push({ code: "SPARKY", name: "Sparky", trade: "electrician", town: "all", phone: "+1 203 555 0398" });
     s.welcomed!.push("2035550398");
-    const ai: Ai = { understand: null, find: sampleFind, live: true, trade: async () => "electrician" };
+    const ai: Ai = { understand: null, find: sampleFind, live: true, triage: async () => ({ trade: "electrician", urgent: true }) };
     const { out } = await receive(s, MARIA, "half the apartment went dark", SUNDAY_9PM, ai);
     expect(to(out, MOM)[0]).toMatch(/Send Sparky \(electrician\)\?$/);
     expect(s.repairs[0]!.trade).toBe("electrician");
   });
 
-  it("the AI isn't asked when the words already say, or for rent and replies", async () => {
+  it("the AI is asked once per new repair, never for rent; the words still win on the trade", async () => {
     const s = withPlumber();
     let asked = 0;
-    const ai: Ai = { understand: null, find: sampleFind, live: true, trade: async () => (asked++, "HVAC") };
+    const ai: Ai = { understand: null, find: sampleFind, live: true, triage: async () => (asked++, { trade: "HVAC", urgent: false }) };
     await receive(s, MARIA, "toilet is clogged", SUNDAY_9PM, ai);
     await receive(s, MARIA, "sent the rent on zelle", SUNDAY_9PM, ai);
-    expect(asked).toBe(0);
-    expect(s.repairs[0]!.trade).toBe("plumber");
+    expect(asked).toBe(1); // the clog, not the rent
+    expect(s.repairs[0]!.trade).toBe("plumber"); // "toilet" beats the AI's HVAC
+    expect(s.repairs[0]!.urgent).toBe(false); // the AI's call on urgency stands
   });
 
   it("if the AI is down, the repair still goes through", async () => {
     const s = fresh();
     vi.spyOn(console, "error").mockImplementation(() => {});
-    const ai: Ai = { understand: null, find: sampleFind, live: true, trade: async () => { throw new Error("529"); } };
+    const ai: Ai = { understand: null, find: sampleFind, live: true, triage: async () => { throw new Error("529"); } };
     const { out } = await receive(s, MARIA, "half the apartment went dark", SUNDAY_9PM, ai);
     expect(to(out, MOM)[0]).toMatch(/New repair #1/);
   });
@@ -322,5 +324,50 @@ describe("replies a person would actually write", () => {
     const list = to(out, MOM)[1]!;
     expect(list).toMatch(/24\/7 emergency service/);
     expect(list).not.toMatch(/Mon-Fri/);
+  });
+});
+
+describe("what's urgent", () => {
+  const triageSays = (trade: string | null, urgent: boolean | null): Ai => ({
+    understand: null,
+    find: sampleFind,
+    live: true,
+    triage: async () => ({ trade, urgent }),
+  });
+
+  it("the AI catches urgent jobs the word list misses: 'it's freezing in here'", async () => {
+    const s = fresh();
+    const { out } = await receive(s, MARIA, "it's freezing in here", SUNDAY_9PM, triageSays("HVAC", true));
+    expect(to(out, MOM)[0]).toMatch(/^New repair #1 \(sounds urgent\)/);
+    expect(planFind(s, "FIND", undefined, SUNDAY_9PM)).toMatchObject({ urgent: true, trade: "HVAC" });
+  });
+
+  it("the AI calms a false alarm: 'the heater makes a small noise sometimes'", async () => {
+    const s = fresh();
+    const { out } = await receive(s, MARIA, "the heater makes a small noise sometimes", SUNDAY_9PM, triageSays("HVAC", false));
+    expect(to(out, MOM)[0]).not.toMatch(/urgent/);
+    expect(planFind(s, "FIND", undefined, SUNDAY_9PM)).toMatchObject({ urgent: false, when: "in the next couple of days (Monday or Tuesday)" });
+  });
+
+  it("without the AI (or if it can't tell), the word list decides", async () => {
+    const s = fresh();
+    await receive(s, MARIA, "no heat at all", SUNDAY_9PM, offline);
+    await receive(s, KEVIN, "closet door is off its track", SUNDAY_9PM, triageSays("handyman", null));
+    expect(s.repairs.map((r) => r.urgent)).toEqual([true, false]);
+  });
+
+  it("the landlord has the last word: 'it can wait' and '#2 is urgent'", async () => {
+    const s = fresh();
+    await receive(s, MARIA, "no heat at all", SUNDAY_9PM, offline);
+    let { out } = await receive(s, MOM, "it can wait", SUNDAY_9PM, offline);
+    expect(to(out, MOM)[0]).toMatch(/Got it, #1 can wait/);
+    expect(planFind(s, "FIND", undefined, SUNDAY_9PM)).toMatchObject({ urgent: false });
+
+    await receive(s, KEVIN, "closet door is off its track", SUNDAY_9PM, offline);
+    ({ out } = await receive(s, MOM, "#2 is urgent", SUNDAY_9PM, offline));
+    expect(to(out, MOM)[0]).toMatch(/Got it, #2 is urgent/);
+    expect(s.repairs[1]!.urgent).toBe(true);
+    ({ out } = await receive(s, MOM, "no rush on 2", SUNDAY_9PM, offline));
+    expect(s.repairs[1]!.urgent).toBe(false);
   });
 });

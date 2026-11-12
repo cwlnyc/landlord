@@ -66,6 +66,8 @@ export type Repair = {
   checkedBack?: boolean;
   /** Who the bot suggested, waiting on the landlord's YES. */
   suggested?: string;
+  /** Someone's needed today: from the AI, the landlord ("it can wait"), or the words. */
+  urgent?: boolean;
   /** The trade the job needs, from the words or the AI; else read from `text`. */
   trade?: string;
   /** Repair people who already said no, so they aren't suggested again. */

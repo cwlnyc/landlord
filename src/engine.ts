@@ -93,6 +93,8 @@ const HELP = [
 export type TextHints = {
   /** The trade a new repair needs, when the AI read it ("burning smell" -> HVAC). */
   trade?: string | null;
+  /** Whether the AI judged it urgent; null or missing falls back to the word list. */
+  urgent?: boolean | null;
 };
 
 export function handleText(state: State, from: string, body: string, now: Date, hints: TextHints = {}): Outbound[] {
@@ -238,6 +240,7 @@ function fromTenant(state: State, unit: Unit, text: string, now: Date, hints: Te
     status: "new",
     createdAt: now.toISOString(),
     ...(tradeForProblem(text) ?? hints.trade ? { trade: (tradeForProblem(text) ?? hints.trade)! } : {}),
+    urgent: hints.urgent ?? URGENT.test(text),
   };
   state.repairs.push(repair);
   return [
@@ -247,7 +250,7 @@ function fromTenant(state: State, unit: Unit, text: string, now: Date, hints: Te
     },
     ...toLandlords(
       state,
-      `New repair #${repair.id} from ${unit.tenant.name}, ${unit.address}:\n"${text}"\n\n${suggest(state, repair)}`,
+      `New repair #${repair.id}${repair.urgent ? " (sounds urgent)" : ""} from ${unit.tenant.name}, ${unit.address}:\n"${text}"\n\n${suggest(state, repair)}`,
     ),
   ];
 }
@@ -473,6 +476,27 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
     return saveContact(state, landlord, name, phone, trade, said.town ?? "all");
   }
 
+  // "it can wait", "no rush", "#3 isn't urgent" / "it's urgent", "asap".
+  const urgency = text.match(
+    /^(?:#?(\d+)\s+)?(?:it|that|this|#?\d+)?\s*(?:can wait|isn'?t urgent|is not urgent|not urgent|no rush)|^(?:#?(\d+)\s+)?(?:it'?s |that'?s |this is |#?\d+ is )?(urgent|an emergency|asap|emergency)\b/i,
+  );
+  if (urgency) {
+    const wait = !urgency[3];
+    const id = idArg(urgency[1] ?? urgency[2] ?? text.match(/#?(\d+)/)?.[1]);
+    const repair = Number.isNaN(id)
+      ? [...state.repairs].reverse().find((r) => OPEN.includes(r.status) && r.status !== "confirmed")
+      : state.repairs.find((r) => r.id === id && OPEN.includes(r.status));
+    if (repair) {
+      repair.urgent = !wait;
+      return toLandlords(
+        state,
+        wait
+          ? `Got it, #${repair.id} can wait. Searches will look for someone in the next couple of days.`
+          : `Got it, #${repair.id} is urgent. Searches will look for someone who can come now or 24/7.`,
+      );
+    }
+  }
+
   if (command === "PAID") return landlordPaid(state, landlord, rest, now);
   if (command === "RENT") return rest.length ? setRent(state, landlord, rest) : reply(rentStatus(state, now));
 
@@ -597,9 +621,14 @@ export type FindPlan = {
 const URGENT = /\b(heat\w*|furnace|boiler|water\w*|leak\w*|flood\w*|burst\w*|sewage|backed up|no power|power out|spark\w*|smoke|gas|locked out)/i;
 
 /** When a repair person is needed, for the search: now if urgent, else the next couple of days. */
-function neededWhen(problem: string, now: Date): { urgent: boolean; when: string } {
+/** Urgent if the AI or the landlord said so; else from the words. */
+export function isUrgent(repair: Repair): boolean {
+  return repair.urgent ?? URGENT.test(repair.text);
+}
+
+function neededWhen(repair: Repair, now: Date): { urgent: boolean; when: string } {
   const day = (d: Date) => d.toLocaleDateString("en-US", { weekday: "long" });
-  if (URGENT.test(problem)) {
+  if (isUrgent(repair)) {
     const time = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
     return { urgent: true, when: `now (${day(now)} ${time}), or first thing tomorrow (${day(new Date(now.getTime() + 864e5))}) at the latest` };
   }
@@ -627,7 +656,7 @@ export function planFind(state: State, text: string, from?: string, now = new Da
     return { reply: `What kind of repair person for #${repair.id} ("${repair.text}")?` };
   }
   const unit = unitOf(state, repair);
-  return { repairId: repair.id, trade, town: townOf(unit), problem: repair.text, ...neededWhen(repair.text, now) };
+  return { repairId: repair.id, trade, town: townOf(unit), problem: repair.text, ...neededWhen(repair, now) };
 }
 
 /**
