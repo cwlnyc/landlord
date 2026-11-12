@@ -7,3 +7,4 @@ data/live-state.json.tmp
 .env
 legal-site/
 data/share-state.json
+data/demo-state.json

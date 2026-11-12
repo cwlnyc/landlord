@@ -11,7 +11,15 @@ import { findCloudflared, startTunnel } from "./tunnel.js";
  *
  * The link carries a random key; without it the tunnel answers 403. Ctrl+C
  * ends the test and the link stops working.
+ *
+ *   npm run share            your own people (data/real.json), for family tests
+ *   npm run share -- --demo  the sample landlord, for showing other landlords
+ *
+ * It also prints a direct link per landlord that skips "Who are you?", for
+ * a demo over the phone: they tap it and watch the texts arrive.
  */
+
+const demo = process.argv.includes("--demo");
 
 const PORT = 4310;
 const key = randomBytes(9).toString("base64url");
@@ -24,7 +32,7 @@ if (!bin) {
 
 const server = spawn("npx", ["tsx", "src/server.ts"], {
   stdio: ["ignore", "pipe", "inherit"],
-  env: { ...process.env, TZ: "America/New_York", PORT: String(PORT), SHARE_KEY: key, SIM_STATE: "../data/share-state.json" },
+  env: { ...process.env, TZ: "America/New_York", PORT: String(PORT), SHARE_KEY: key, SIM_STATE: demo ? "../data/demo-state.json" : "../data/share-state.json", ...(demo ? { SIM_SEED: "demo" } : {}) },
 });
 // Show the server's own log lines (AI readings and so on) after the link.
 let ready = false;
@@ -51,9 +59,18 @@ try {
     stop();
   });
   process.on("exit", () => child.kill());
-  console.log("\nSend everyone this link (it may take ~20 seconds to start working):\n");
+  const state = (await (await fetch(`http://localhost:${PORT}/api/state`)).json()) as {
+    state: { landlords: { name: string; phone: string }[] };
+  };
+  const digits = (p: string) => p.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  console.log(`\n${demo ? "DEMO (sample landlord, not your family's data)" : "Your people (data/real.json)"}. Links may take ~20 seconds to start working.\n`);
+  console.log("Everyone (each taps who they are):");
   console.log(`  ${url}/phone?key=${key}\n`);
-  console.log("Each person opens it, taps who they are, and texts like normal.");
+  for (const l of state.state.landlords) {
+    console.log(`Straight to ${l.name}'s texts (for a landlord on a phone call: one tap, nothing to pick):`);
+    console.log(`  ${url}/phone?key=${key}&n=${digits(l.phone)}\n`);
+  }
+  console.log("You play the tenant and the repair person on the laptop view.");
   console.log("The laptop view (clock buttons, every phone at once) is http://localhost:" + PORT);
   console.log("Ctrl+C ends the test; the link stops working.\n");
 } catch (error) {

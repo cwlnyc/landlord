@@ -165,6 +165,12 @@ notification buzz: keep the page open.
 - Ctrl+C ends the test and the link stops working. Each run makes a new link.
 - The laptop view at `http://localhost:4310` has the clock buttons, for
   trying rent reminders together.
+- **Demos to other landlords:** `npm run share -- --demo` uses the sample
+  landlord instead of your family's names and numbers, and prints a direct
+  link straight to the landlord's texts. On a phone call, text them that one
+  link: they tap it and watch the texts arrive while you play the tenant and
+  repair person on the laptop. In person or on a video call, show the laptop
+  view instead.
 
 ## Going live: a real phone number
 

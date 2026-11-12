@@ -28,9 +28,14 @@ const STATE_FILE = new URL(process.env.SIM_STATE ?? "../data/state.json", import
 // Set by `npm run share`: requests that come through the tunnel must carry
 // this key, so a stranger who guesses the address can't read or send.
 const SHARE_KEY = process.env.SHARE_KEY ?? "";
-const SEED_FILE = existsSync(new URL("../data/real.json", import.meta.url))
-  ? new URL("../data/real.json", import.meta.url)
-  : new URL("../data/example.json", import.meta.url);
+// SIM_SEED=demo uses data/demo.json: one sample landlord, "Pat", for demos
+// to other landlords (never your family's names and numbers).
+const SEED_FILE =
+  process.env.SIM_SEED === "demo"
+    ? new URL("../data/demo.json", import.meta.url)
+    : existsSync(new URL("../data/real.json", import.meta.url))
+      ? new URL("../data/real.json", import.meta.url)
+      : new URL("../data/example.json", import.meta.url);
 const PAGE = new URL("../public/index.html", import.meta.url);
 const PHONE_PAGE = new URL("../public/phone.html", import.meta.url);
 

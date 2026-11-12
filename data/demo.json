@@ -1,0 +1,68 @@
+{
+  "landlords": [
+    {
+      "name": "Pat",
+      "phone": "+1 203 555 0101"
+    }
+  ],
+  "units": [
+    {
+      "id": "naug-1",
+      "address": "12 Oak St, Naugatuck, Unit 1",
+      "town": "Naugatuck",
+      "tenant": {
+        "name": "Maria",
+        "phone": "+1 203 555 0201"
+      },
+      "rent": 1450,
+      "rentDue": 1
+    },
+    {
+      "id": "tol-2",
+      "address": "40 Elm Rd, Tolland, Unit 2",
+      "town": "Tolland",
+      "tenant": {
+        "name": "Kevin",
+        "phone": "+1 860 555 0202"
+      },
+      "rent": 1200,
+      "rentDue": 1
+    },
+    {
+      "id": "ham-3",
+      "address": "7 Pine Ave, Hamden, Unit 3",
+      "town": "Hamden",
+      "tenant": {
+        "name": "Priya",
+        "phone": "+1 203 555 0203"
+      },
+      "rent": 1600,
+      "rentDue": 1
+    }
+  ],
+  "vendors": [
+    {
+      "code": "HVAC",
+      "name": "Sam",
+      "trade": "HVAC",
+      "town": "all CT",
+      "phone": "+1 203 555 0301"
+    },
+    {
+      "code": "JOHN",
+      "name": "John",
+      "trade": "handyman",
+      "town": "Hamden",
+      "phone": "+1 203 555 0302"
+    },
+    {
+      "code": "TOLLAND",
+      "name": "Rob",
+      "trade": "handyman",
+      "town": "Tolland",
+      "phone": "+1 860 555 0303"
+    }
+  ],
+  "repairs": [],
+  "nextId": 1
+}
