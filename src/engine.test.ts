@@ -5,6 +5,7 @@ import type { Outbound, State } from "./types.js";
 const MOM = "+1 203 555 0101";
 const DAD = "+1 203 555 0102";
 const MARIA = "+1 203 555 0201";
+const KEVIN = "+1 860 555 0202";
 const SAM = "+1 203 555 0301";
 const JOHN = "+1 203 555 0302";
 
@@ -35,7 +36,7 @@ describe("the furnace story, by text", () => {
 
     // 3. He names a time; the tenant is asked (chase #2, done for her).
     out = handleText(s, SAM, "tomorrow 8am", SUNDAY_9PM);
-    expect(to(out, MARIA)[0]).toMatch(/Mon, Nov 9, 8:00 AM.*Reply 1/);
+    expect(to(out, MARIA)[0]).toMatch(/Mon, Nov 9, 8:00 AM.*Will you be home then\?/);
     expect(s.repairs[0]!.status).toBe("asking-tenant");
 
     // 4. Tenant confirms. Everyone hears.
@@ -63,7 +64,8 @@ describe("when things go sideways", () => {
     handleText(s, MOM, "SEND JOHN", SUNDAY_9PM);
     const out = handleText(s, JOHN, "no sorry booked", SUNDAY_9PM);
     expect(s.repairs[0]!.status).toBe("new");
-    expect(to(out, MOM)[0]).toMatch(/can't do #1.*SEND/);
+    // A sink is a plumber's job and no plumber is saved: offer a search.
+    expect(to(out, MOM)[0]).toMatch(/John can't do #1.*Search for plumbers near Naugatuck\?$/);
   });
 
   it("tenant can't make it: repair person asked for another time", () => {
@@ -81,7 +83,7 @@ describe("when things go sideways", () => {
     handleText(s, MARIA, "sink leaking", SUNDAY_9PM);
     handleText(s, MOM, "SEND JOHN", SUNDAY_9PM);
     const out = handleText(s, JOHN, "sometime this week prob", SUNDAY_9PM);
-    expect(to(out, JOHN)[0]).toMatch(/didn't catch the time/);
+    expect(to(out, JOHN)[0]).toMatch(/didn't catch the day and time/);
     expect(s.repairs[0]!.status).toBe("asking-vendor");
   });
 
@@ -92,7 +94,7 @@ describe("when things go sideways", () => {
     const out = handleText(s, JOHN, "cant tmrw, thurs after 2 ok?", SUNDAY_9PM);
     expect(s.repairs[0]!.status).toBe("asking-vendor");
     expect(s.repairs[0]!.vendorCode).toBe("JOHN");
-    expect(to(out, JOHN)[0]).toMatch(/didn't catch the time/);
+    expect(to(out, JOHN)[0]).toMatch(/didn't catch the day and time/);
   });
 
   it("'no sorry, booked today' is a no: 'today' only says why", () => {
@@ -138,11 +140,18 @@ describe("when things go sideways", () => {
     expect(tick(s, new Date(2026, 10, 10, 13, 0))).toEqual([]); // only once
   });
 
+  it("SEND works with a first name, not just the code", () => {
+    const s = fresh();
+    handleText(s, KEVIN, "door won't close", SUNDAY_9PM);
+    handleText(s, MOM, "send rob instead", SUNDAY_9PM);
+    expect(s.repairs[0]!.vendorCode).toBe("TOLLAND");
+  });
+
   it("unknown vendor code lists the real ones", () => {
     const s = fresh();
     handleText(s, MARIA, "sink leaking", SUNDAY_9PM);
     const out = handleText(s, MOM, "send plumber", SUNDAY_9PM);
-    expect(to(out, MOM)[0]).toMatch(/HVAC.*JOHN.*TOLLAND/);
+    expect(to(out, MOM)[0]).toMatch(/Who should I ask\? Sam \(HVAC\), John \(handyman\), Rob \(handyman\)/);
   });
 
   it("strangers are turned away", () => {

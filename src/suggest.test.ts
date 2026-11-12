@@ -24,7 +24,7 @@ describe("the bot suggests who to send", () => {
   it("heat problem: 'Send Sam?', and YES sends him", () => {
     const s = fresh();
     const out = handleText(s, MARIA, "heat not working", NOW);
-    expect(to(out, MOM)[0]).toMatch(/Send Sam \(HVAC\)\? Reply YES\. Or SEND \+ someone else \(JOHN, TOLLAND\)\./);
+    expect(to(out, MOM)[0]).toMatch(/Send Sam \(HVAC\)\?$/);
     const yes = handleText(s, MOM, "yes", NOW);
     expect(to(yes, SAM)[0]).toMatch(/heat not working/);
     expect(s.repairs[0]!.status).toBe("asking-vendor");
@@ -43,17 +43,17 @@ describe("the bot suggests who to send", () => {
     handleText(s, KEVIN, "bedroom door won't close", NOW);
     handleText(s, MOM, "yes", NOW);
     let out = handleText(s, ROB, "no sorry", NOW);
-    expect(to(out, MOM)[0]).toMatch(/Rob can't do #1.*Send John \(handyman\)\? Reply YES/);
+    expect(to(out, MOM)[0]).toMatch(/Rob can't do #1.*Send John \(handyman\)\?$/);
     handleText(s, MOM, "yes", NOW);
     out = handleText(s, "+1 203 555 0302", "no", NOW);
     // A door is handyman work with no search trade, so it asks what kind.
-    expect(to(out, MOM)[0]).toMatch(/John can't do #1.*What kind of repair person\? Reply FIND \+ the trade.*near Tolland\. Or SEND \+ someone \(HVAC\)\./);
+    expect(to(out, MOM)[0]).toMatch(/John can't do #1.*What kind of repair person should I look for, near Tolland\?$/);
   });
 
   it("no one saved fits: says so and offers FIND", () => {
     const s = fresh();
     const out = handleText(s, MARIA, "outlet sparking in kitchen", NOW);
-    expect(to(out, MOM)[0]).toMatch(/No saved electrician for this\. Search for electricians near Naugatuck\? Reply YES\./);
+    expect(to(out, MOM)[0]).toMatch(/No saved electrician for this\. Search for electricians near Naugatuck\?$/);
     // That YES is a search: handled before the engine (receive), so the
     // engine alone has nothing to send.
     expect(s.repairs[0]!.suggested).toBe("FIND");
@@ -63,7 +63,7 @@ describe("the bot suggests who to send", () => {
     const s = fresh();
     handleText(s, MARIA, "heat not working", NOW);
     const out = handleText(s, MOM, "no", NOW);
-    expect(to(out, MOM)[0]).toMatch(/^OK, not Sam\. No one else saved does HVAC work\. Search for HVAC companies near Naugatuck\? Reply YES\./);
+    expect(to(out, MOM)[0]).toMatch(/^OK, not Sam\. No one else saved does HVAC work\. Search for HVAC companies near Naugatuck\?$/);
     expect(s.repairs[0]!.status).toBe("new");
     expect(s.repairs[0]!.suggested).toBe("FIND");
     expect(s.repairs[0]!.tried).toEqual(["HVAC"]);
@@ -73,7 +73,7 @@ describe("the bot suggests who to send", () => {
     const s = fresh();
     handleText(s, KEVIN, "bedroom door won't close", NOW); // Tolland: Rob first
     const out = handleText(s, MOM, "nope", NOW);
-    expect(to(out, MOM)[0]).toMatch(/^OK, not Rob\. Send John \(handyman\)\? Reply YES\./);
+    expect(to(out, MOM)[0]).toMatch(/^OK, not Rob\. Send John \(handyman\)\?$/);
   });
 
   it("NO to a search keeps it waiting for the landlord's pick", () => {
@@ -84,9 +84,18 @@ describe("the bot suggests who to send", () => {
     expect(s.repairs[0]!.suggested).toBeUndefined();
   });
 
+  it("normal yeses work: 'sure', 'go ahead', 'sounds good'", () => {
+    for (const reply of ["sure", "go ahead", "sounds good", "yup"]) {
+      const s = fresh();
+      handleText(s, MARIA, "heat not working", NOW);
+      handleText(s, MOM, reply, NOW);
+      expect(s.repairs[0]!.status, reply).toBe("asking-vendor");
+    }
+  });
+
   it("YES with no pending suggestion doesn't send anyone", () => {
     const s = fresh();
-    expect(to(handleText(s, MOM, "ok", NOW), MOM)[0]).toMatch(/nothing waiting/);
+    expect(to(handleText(s, MOM, "ok", NOW), MOM)[0]).toMatch(/Nothing's waiting on you right now/);
   });
 });
 
@@ -102,7 +111,7 @@ describe("adding repair people by sharing a contact", () => {
   it("asks once when the name doesn't say the trade", () => {
     const s = fresh();
     let out = handleText(s, MOM, card("Dave Smith", "(203) 555-0405"), NOW);
-    expect(to(out, MOM)[0]).toMatch(/What do they do, and where\? Reply like: PLUMBER HAMDEN/);
+    expect(to(out, MOM)[0]).toMatch(/What do they do, and where\? \(Like: plumber, Hamden\)/);
     expect(needsHelp(s, MOM, "electrician hamden", NOW)).toBeNull();
     out = handleText(s, MOM, "electrician hamden", NOW);
     expect(to(out, MOM)[0]).toMatch(/Saved Dave Smith: electrician, Hamden/);

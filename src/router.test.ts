@@ -136,7 +136,8 @@ describe("what counts as an answer the line can use", () => {
     ["landlord", "YES", true],
     ["landlord", "FIND plumber 3", true],
     ["landlord", "sure, go ahead", true], // "sure" is a YES
-    ["landlord", "go ahead with him", false],
+    ["landlord", "go ahead with him", true], // "go ahead" is a yes
+    ["landlord", "how about the other guy", false],
     ["vendor", "11/12 2:00pm", true],
     ["vendor", "NO", true],
     ["vendor", "thursday afternoon", false],

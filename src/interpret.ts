@@ -1,6 +1,6 @@
 import type { Ai } from "./ai.js";
 import { handleKeyword, prepareOutbound } from "./compliance.js";
-import { LANDLORD_COMMANDS, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, sameReply, usableReply } from "./engine.js";
+import { LANDLORD_COMMANDS, bookingFromReply, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, sameReply, usableReply } from "./engine.js";
 import { tradeForProblem } from "./match.js";
 import type { Outbound, State } from "./types.js";
 
@@ -68,11 +68,19 @@ async function respond(
   }
   let understoodAs: string | undefined;
 
-  // "Search for plumbers? Reply YES": that YES runs the search.
-  const search = searchFromYes(state, from, text);
+  // After a search list or a call-back, "1 tomorrow 8am" is a booking.
+  const booking = bookingFromReply(state, from, text, now);
+  if (state.pendingBook?.[digits(from)]) {
+    const { [digits(from)]: _, ...others } = state.pendingBook;
+    state.pendingBook = others;
+  }
+  if (booking) text = booking;
+
+  // "Search for plumbers near Naugatuck?": a yes runs the search.
+  const search = booking ? null : searchFromYes(state, from, text);
   if (search) text = search;
 
-  const help = search ? null : needsHelp(state, from, text, now);
+  const help = search || booking ? null : needsHelp(state, from, text, now);
   if (help && ai.understand) {
     try {
       const command = await ai.understand({ ...help, text, now, valid: (c) => usableReply(help.role, c, now), same: (a, b) => sameReply(help.role, a, b, now) });
@@ -87,7 +95,7 @@ async function respond(
   }
 
   if (isLandlord && /^find\b/i.test(text)) {
-    const plan = planFind(state, text, from);
+    const plan = planFind(state, text, from, now);
     if ("reply" in plan) return { out: [{ to: from, body: plan.reply }], understoodAs };
     // A web search takes a while; say so at once, or it looks broken.
     await sendNow([{ to: from, body: `Looking for ${plan.trade} near ${plan.town} for #${plan.repairId} now. This takes about a minute.` }]);

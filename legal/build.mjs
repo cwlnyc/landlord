@@ -55,10 +55,10 @@ ${body}
 const samples = {
   welcome:
     "Hi Maria, this is Pat's repair and rent line. You'll get texts here about repairs and rent at 12 Oak St, Unit 1. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out.",
-  repair: "Sam (HVAC) can come Mon, Nov 9, 8:00 AM about: \"heat not working\". Reply 1 if you'll be home, 2 if not.",
+  repair: "Sam (HVAC) can come Mon, Nov 9, 8:00 AM about: \"heat not working\". Will you be home then?",
   rent: "Hi Maria, a reminder from Pat: December rent ($1,450) is due Tue, Dec 1. Thanks!",
   vendor:
-    "Hi Sam, this is the repair line for Pat. Job at 12 Oak St, Unit 1: \"heat not working\". When can you go? Reply with a day and time like TUE 9AM, or NO if you can't.",
+    "Hi Sam, this is the repair line for Pat. Job at 12 Oak St, Unit 1: \"heat not working\". When could you go?",
   stop: "You have successfully been unsubscribed. You will not receive any more messages from this number. Reply START to resubscribe.",
   help: "Pat's repair and rent line. Text a problem with your home to report it, or reply to the texts you get. Msg frequency varies. Msg & data rates may apply. Reply STOP to opt out.",
 };

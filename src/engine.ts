@@ -26,8 +26,10 @@ import type { Found, Outbound, Person, Repair, State, Unit, Vendor } from "./typ
 const OPEN: Repair["status"][] = ["new", "asking-vendor", "asking-tenant", "confirmed"];
 const HOUR = 60 * 60 * 1000;
 
-const YES_WORDS = ["YES", "Y", "YEP", "YEAH", "YA", "OK", "OKAY", "SURE", "K"];
-const NO_WORDS = ["NO", "N", "NOPE", "NAH"];
+// First words that mean yes or no, so a normal reply works without the AI:
+// "sure", "go ahead", "sounds good", "nah", "not him".
+const YES_WORDS = ["YES", "Y", "YEP", "YUP", "YEAH", "YEA", "YA", "OK", "OKAY", "SURE", "K", "GO", "PLEASE", "PLS", "SOUNDS", "ABSOLUTELY", "DEFINITELY"];
+const NO_WORDS = ["NO", "N", "NOPE", "NAH", "DONT", "NOT"];
 export const LANDLORD_COMMANDS = ["SEND", "LIST", "STATUS", "DONE", "CANCEL", "DROP", "FIND", "BOOKED", "HELP", "PAID", "RENT", ...YES_WORDS, ...NO_WORDS];
 
 export function digits(phone: string): string {
@@ -250,10 +252,6 @@ function fromTenant(state: State, unit: Unit, text: string, now: Date, hints: Te
   ];
 }
 
-/**
- * "Send Sam (HVAC)? Reply YES" when someone fits, else how to pick or
- * search. Remembers the suggestion so a bare YES means it.
- */
 /** "plumber" -> "plumbers", "HVAC" -> "HVAC companies". */
 function plural(trade: string): string {
   const special: Record<string, string> = {
@@ -269,26 +267,30 @@ function plural(trade: string): string {
 /** What `repair.suggested` holds when the suggestion is a web search. */
 export const SUGGEST_SEARCH = "FIND";
 
+/**
+ * The next step, asked like a person would: "Send Sam (HVAC)?" or "Search
+ * for plumbers near Naugatuck?". Any normal yes or no answers it (the
+ * suggestion is remembered), and "send Rob instead" picks someone else.
+ */
 function suggest(state: State, repair: Repair): string {
   const unit = unitOf(state, repair);
   const need = needOf(repair);
   const town = townOf(unit);
   const pick = pickVendor(state.vendors, need, town, repair.tried);
-  const others = textable(state).filter((v) => v.code !== pick?.code && !repair.tried?.includes(v.code));
   if (pick) {
     repair.suggested = pick.code;
-    const alt = others.length ? ` Or SEND + someone else (${others.map((v) => v.code).join(", ")}).` : "";
-    return `Send ${pick.name} (${pick.trade})? Reply YES.${alt}`;
+    return `Send ${pick.name} (${pick.trade})?`;
   }
-  const who = others.length ? ` Or SEND + someone (${others.map((v) => v.code).join(", ")}).` : "";
   if (need) {
-    // Nobody saved fits: the next step is a search, one YES away.
+    // Nobody saved fits: the next step is a search, one "yes" away.
     repair.suggested = SUGGEST_SEARCH;
     const lead = repair.tried?.length ? `No one else saved does ${need} work.` : `No saved ${need} for this.`;
-    return `${lead} Search for ${plural(need)} near ${town}? Reply YES.${who}`;
+    return `${lead} Search for ${plural(need)} near ${town}?`;
   }
   delete repair.suggested;
-  return `What kind of repair person? Reply FIND + the trade (e.g. FIND ELECTRICIAN) to search near ${town}.${who}`;
+  // The answer ("an electrician") is read as what to search for.
+  state.pendingFind = { ...state.pendingFind, ...Object.fromEntries(state.landlords.map((l) => [digits(l.phone), repair.id])) };
+  return `What kind of repair person should I look for, near ${town}?`;
 }
 
 /**
@@ -341,11 +343,12 @@ function tenantDeclines(state: State, repair: Repair): Outbound[] {
   // Booked by phone: the landlord has to call them back.
   if (vendor && vendor.textable === false) {
     repair.status = "new";
+    askBooking(state, repair.id, vendor.code);
     return [
       { to: unit.tenant.phone, body: "No problem. Your landlord will find another time." },
       ...toLandlords(
         state,
-        `${unit.tenant.name} can't do ${when} for #${repair.id}. Call ${vendor.name} at ${vendor.phone} for another time, then text BOOKED ${vendor.code} + the new day and time.`,
+        `${unit.tenant.name} can't do ${when} for #${repair.id}. Call ${vendor.name} at ${vendor.phone} for another time, then tell me the new day and time.`,
       ),
     ];
   }
@@ -358,7 +361,7 @@ function tenantDeclines(state: State, repair: Repair): Outbound[] {
   if (vendor) {
     out.push({
       to: vendor.phone,
-      body: `The tenant at ${unit.address} can't do ${when}. What other day and time work? Reply like TUE 9AM, or NO.`,
+      body: `The tenant at ${unit.address} can't do ${when}. What other day and time could work?`,
     });
   }
   return out;
@@ -375,7 +378,7 @@ function offerToTenant(state: State, repair: Repair, vendor: Vendor, slot: Date)
   return [
     {
       to: unit.tenant.phone,
-      body: `${vendor.name} (${vendor.trade}) can come ${formatSlot(repair.slot)} about: "${repair.text}". Reply 1 if you'll be home, 2 if not.`,
+      body: `${vendor.name} (${vendor.trade}) can come ${formatSlot(repair.slot)} about: "${repair.text}". Will you be home then?`,
     },
   ];
 }
@@ -413,7 +416,7 @@ function fromVendor(state: State, vendor: Vendor, raw: string, now: Date): Outbo
     return [
       {
         to: vendor.phone,
-        body: "Sorry, I didn't catch the time. Reply with a day and time like TUE 9AM or TOMORROW 2PM, or NO if you can't.",
+        body: "Sorry, I didn't catch the day and time. When could you go? (Like: Tue 9am)",
       },
     ];
   }
@@ -446,7 +449,7 @@ function sendTo(state: State, vendor: Vendor, repair: Repair): Outbound[] {
   return [
     {
       to: vendor.phone,
-      body: `Hi ${vendor.name}, this is the repair line for ${state.landlords[0]?.name ?? "your landlord"}. Job at ${unit.address}: "${repair.text}". When can you go? Reply with a day and time like TUE 9AM, or NO if you can't.`,
+      body: `Hi ${vendor.name}, this is the repair line for ${state.landlords[0]?.name ?? "your landlord"}. Job at ${unit.address}: "${repair.text}". When could you go?`,
     },
     ...toLandlords(state, `Asked ${vendor.name} about #${repair.id}. I'll text you when they reply.`),
   ];
@@ -478,7 +481,7 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
     const repair = Number.isNaN(id)
       ? [...state.repairs].reverse().find((r) => r.status === "new" && r.suggested)
       : state.repairs.find((r) => r.id === id && r.status === "new" && r.suggested);
-    if (!repair) return reply("There's nothing waiting on a yes or no. Reply LIST to see open repairs.");
+    if (!repair) return reply("Nothing's waiting on you right now. Text LIST to see open repairs.");
     if (NO_WORDS.includes(command)) {
       const declined = repair.suggested;
       delete repair.suggested;
@@ -498,8 +501,11 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
 
   if (command === "SEND") {
     const code = (rest[0] ?? "").toUpperCase();
-    const vendor = textable(state).find((v) => v.code === code);
-    if (!vendor) return reply(`Who should I ask? Reply SEND + one of: ${vendorList(state)}`);
+    // By code or by first name: "send rob instead" works.
+    const vendor =
+      textable(state).find((v) => v.code === code) ??
+      textable(state).find((v) => v.name.split(/\s+/)[0]!.toUpperCase() === code);
+    if (!vendor) return reply(`Who should I ask? ${textable(state).map((v) => `${v.name} (${v.trade})`).join(", ")}`);
     const id = idArg(rest[1]);
     const repair = Number.isNaN(id)
       ? [...state.repairs].reverse().find((r) => r.status === "new")
@@ -558,7 +564,7 @@ function saveContact(
   const finalTrade = trade ?? said.trade;
   if (!finalTrade) {
     state.pendingContact = { name: said.name, phone };
-    return reply(`Got ${said.name}'s number. What do they do, and where? Reply like: PLUMBER HAMDEN, or HANDYMAN ALL.`);
+    return reply(`Got ${said.name}'s number. What do they do, and where? (Like: plumber, Hamden)`);
   }
   const label = tradeLabel(finalTrade) ?? finalTrade;
   const where = town ?? said.town ?? "all";
@@ -576,14 +582,37 @@ function saveContact(
 
 /* ------------------------- find and booked ------------------------- */
 
-export type FindPlan = { repairId: number; trade: string; town: string; problem: string };
+export type FindPlan = {
+  repairId: number;
+  trade: string;
+  town: string;
+  problem: string;
+  /** No heat, no water, a leak, sparks: someone is needed now, nights and weekends included. */
+  urgent: boolean;
+  /** When they're needed, in words for the search: "now (Sunday 9:00 PM)" or "Monday or Tuesday". */
+  when: string;
+};
+
+// Word stems on purpose: "waters", "water's", "leaking", "flooded" all count.
+const URGENT = /\b(heat\w*|furnace|boiler|water\w*|leak\w*|flood\w*|burst\w*|sewage|backed up|no power|power out|spark\w*|smoke|gas|locked out)/i;
+
+/** When a repair person is needed, for the search: now if urgent, else the next couple of days. */
+function neededWhen(problem: string, now: Date): { urgent: boolean; when: string } {
+  const day = (d: Date) => d.toLocaleDateString("en-US", { weekday: "long" });
+  if (URGENT.test(problem)) {
+    const time = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    return { urgent: true, when: `now (${day(now)} ${time}), or first thing tomorrow (${day(new Date(now.getTime() + 864e5))}) at the latest` };
+  }
+  const next = [1, 2].map((n) => day(new Date(now.getFullYear(), now.getMonth(), now.getDate() + n)));
+  return { urgent: false, when: `in the next couple of days (${next.join(" or ")})` };
+}
 
 /**
  * Reads "FIND HVAC", "FIND plumber 3" or "FIND #3 plumber" into what to
  * search for. The search itself is outside the engine (it's slow and costs
  * money); its results come back through `showFound`.
  */
-export function planFind(state: State, text: string, from?: string): FindPlan | { reply: string } {
+export function planFind(state: State, text: string, from?: string, now = new Date()): FindPlan | { reply: string } {
   const words = text.trim().split(/\s+/).slice(1);
   const idWord = words.find((w) => /^#?\d+$/.test(w));
   const repair = pickRepair(state, idArg(idWord));
@@ -595,10 +624,31 @@ export function planFind(state: State, text: string, from?: string): FindPlan | 
   if (!trade) {
     // Remember the question, so a bare "plumber" next is read as the answer.
     if (from) state.pendingFind = { ...state.pendingFind, [digits(from)]: repair.id };
-    return { reply: `What kind of repair person for #${repair.id} ("${repair.text}")? Reply like PLUMBER, HVAC or ELECTRICIAN.` };
+    return { reply: `What kind of repair person for #${repair.id} ("${repair.text}")?` };
   }
   const unit = unitOf(state, repair);
-  return { repairId: repair.id, trade, town: townOf(unit), problem: repair.text };
+  return { repairId: repair.id, trade, town: townOf(unit), problem: repair.text, ...neededWhen(repair.text, now) };
+}
+
+/**
+ * What a landlord's reply means right after the line asked them something
+ * that needs a booking answer: "1 tomorrow 8am" after a search list, or
+ * "tue 10am" after "call them back for another time". Null when it isn't one.
+ */
+export function bookingFromReply(state: State, from: string, body: string, now: Date): string | null {
+  const ask = state.pendingBook?.[digits(from)];
+  if (!ask) return null;
+  const text = body.trim().replace(/^booked\s+/i, "");
+  if (ask.code) return parseVisitTime(text, now) ? `BOOKED ${ask.code} ${text} #${ask.repairId}` : null;
+  const m = text.match(/^#?(\d)\b[\s,]*(.+)$/);
+  return m && parseVisitTime(m[2]!, now) ? `BOOKED ${m[1]} ${m[2]} #${ask.repairId}` : null;
+}
+
+function askBooking(state: State, repairId: number, code?: string) {
+  state.pendingBook = {
+    ...state.pendingBook,
+    ...Object.fromEntries(state.landlords.map((l) => [digits(l.phone), { repairId, ...(code ? { code } : {}) }])),
+  };
 }
 
 /** Shows search results as a numbered list to call. Keeps them for BOOKED. */
@@ -608,6 +658,7 @@ export function showFound(state: State, plan: FindPlan, results: Found[], sample
   }
   state.found = { ...state.found, [plan.repairId]: results.map((f) => ({ ...f, trade: plan.trade })) };
   state.lastFound = plan.repairId;
+  askBooking(state, plan.repairId);
   const lines = results.map((f, i) => {
     const stars = f.rating ? ` ${f.rating}★${f.reviews ? ` (${f.reviews} reviews)` : ""}` : "";
     return `${i + 1}. ${f.name}${stars}${f.note ? `, ${f.note}` : ""}\n   ${f.phone}`;
@@ -615,10 +666,10 @@ export function showFound(state: State, plan: FindPlan, results: Found[], sample
   return toLandlords(
     state,
     [
-      `${sample ? "SAMPLE RESULTS (search is off). " : ""}${plan.trade.toUpperCase()} near ${plan.town} for #${plan.repairId}:`,
+      `${sample ? "SAMPLE RESULTS (search is off). " : ""}${plan.trade.toUpperCase()} near ${plan.town} for #${plan.repairId}, ${plan.urgent ? "who can come now or offer 24/7 service" : "open in the next couple of days"}:`,
       ...lines,
       "",
-      `Call them. When one agrees to a time, text BOOKED + the number + the time, e.g. BOOKED 1 TOMORROW 8AM. Numbers come from the web, so double-check before you rely on one.`,
+      `Call them, then tell me who you booked and when (like: 1, tomorrow 8am). Numbers and hours come from the web, so double-check before you rely on one.`,
     ].join("\n"),
   );
 }

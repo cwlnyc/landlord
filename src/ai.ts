@@ -237,7 +237,9 @@ async function search(
       content: [
         `A landlord needs a ${plan.trade} for a rental in ${plan.town}, Connecticut. The tenant reported: "${plan.problem}".`,
         "Search the web for up to 3 local, currently operating businesses that do this work in or near that town and list a phone number.",
-        "Prefer high ratings with many reviews, and same-day or 24/7 emergency service if the problem sounds urgent (no heat, no water, a leak).",
+        `They're needed ${plan.when}. Only include businesses whose listed hours or service cover that time: check the days and hours on their listing, and skip any that are closed then.${plan.urgent ? " This is urgent: prefer 24/7 or same-day emergency service." : ""}`,
+        "Prefer high ratings with many reviews.",
+        'In each note, say when they\'re available, e.g. "24/7 emergency service" or "Mon-Sat 7am-6pm".',
         "Only report a phone number you saw on a page; never guess one. Skip lead-generation sites and national call centers.",
         "Then call report_businesses with what you found (an empty list if nothing fits).",
       ].join("\n"),
@@ -286,9 +288,14 @@ async function search(
 /** Stand-in results so FIND works in the simulator without a key. */
 export const sampleFind: Finder = async (plan) => {
   const trade = plan.trade.replace(/\b\w/g, (c) => c.toUpperCase());
-  return [
-    { name: `${plan.town} ${trade} Pros (sample)`, phone: "(203) 555-0191", rating: 4.9, reviews: 190, note: "24/7 emergency service" },
-    { name: `Valley ${trade} Co (sample)`, phone: "(203) 555-0192", rating: 4.8, reviews: 85, note: null },
-    { name: `Nutmeg ${trade} (sample)`, phone: "(203) 555-0193", rating: 4.6, reviews: 310, note: "same-day visits" },
-  ];
+  return plan.urgent
+    ? [
+        { name: `${plan.town} ${trade} Pros (sample)`, phone: "(203) 555-0191", rating: 4.9, reviews: 190, note: "24/7 emergency service" },
+        { name: `Nutmeg ${trade} (sample)`, phone: "(203) 555-0193", rating: 4.6, reviews: 310, note: "same-day, 7 days a week" },
+      ]
+    : [
+        { name: `${plan.town} ${trade} Pros (sample)`, phone: "(203) 555-0191", rating: 4.9, reviews: 190, note: "Mon-Sat 7am-6pm" },
+        { name: `Valley ${trade} Co (sample)`, phone: "(203) 555-0192", rating: 4.8, reviews: 85, note: "Mon-Fri 8am-5pm" },
+        { name: `Nutmeg ${trade} (sample)`, phone: "(203) 555-0193", rating: 4.6, reviews: 310, note: "same-day, 7 days a week" },
+      ];
 };

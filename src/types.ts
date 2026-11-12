@@ -87,6 +87,8 @@ export type State = {
   lastSent?: Record<string, string>;
   /** Landlords the line just asked "what kind of repair person?", by number, with the repair. */
   pendingFind?: Record<string, number>;
+  /** Landlords the line asked who they booked (after a search, or a call-back). */
+  pendingBook?: Record<string, { repairId: number; code?: string }>;
   /** A shared contact whose trade the bot asked about. */
   pendingContact?: { name: string; phone: string };
   /** Rent the landlord marked paid. Tracking only; no money moves. */
