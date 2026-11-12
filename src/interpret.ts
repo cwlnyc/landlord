@@ -2,6 +2,7 @@ import type { Ai } from "./ai.js";
 import { handleKeyword, prepareOutbound } from "./compliance.js";
 import { LANDLORD_COMMANDS, bookingFromReply, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, sameReply, usableReply } from "./engine.js";
 import { tradeForProblem } from "./match.js";
+import { paidFromReply, rentFromWords } from "./rent.js";
 import type { Outbound, State } from "./types.js";
 
 /**
@@ -67,6 +68,18 @@ async function respond(
     if (isLandlord && !LANDLORD_COMMANDS.includes(word)) text = `FIND ${text} #${pending}`;
   }
   let understoodAs: string | undefined;
+
+  // Rent said plainly: "got it" after "let me know once it's in", or
+  // "Kevin paid 600 cash" / "Maria's rent is 1450" any time.
+  if (isLandlord) {
+    const paid = paidFromReply(state, from, text);
+    if (state.pendingPaid?.[digits(from)]) {
+      const { [digits(from)]: _, ...others } = state.pendingPaid;
+      state.pendingPaid = others;
+    }
+    const plain = paid ?? rentFromWords(state, text);
+    if (plain) text = plain;
+  }
 
   // After a search list or a call-back, "1 tomorrow 8am" is a booking.
   const booking = bookingFromReply(state, from, text, now);

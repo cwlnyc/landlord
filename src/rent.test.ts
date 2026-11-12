@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
+import { sampleFind, type Ai } from "./ai.js";
 import { handleText, tick } from "./engine.js";
+import { receive } from "./interpret.js";
 import { currentPeriod, isRentText } from "./rent.js";
 import type { Outbound, State } from "./types.js";
 
@@ -52,7 +54,7 @@ describe("a month of rent reminders", () => {
     // 5 days after the due date, 9am: nudges for Kevin's balance and Priya, one list for the landlords.
     const late = tick(s, at(12, 6, 9));
     expect(to(late, MARIA)).toEqual([]);
-    expect(to(late, KEVIN)[0]).toMatch(/December rent \(\$600, due Tue, Dec 1\) isn't marked paid yet\. If you've already sent it, reply PAID/);
+    expect(to(late, KEVIN)[0]).toMatch(/December rent \(\$600, due Tue, Dec 1\) isn't marked paid yet\. If you've already sent it, just let me know and I'll tell Mom\./);
     expect(to(late, PRIYA)).toHaveLength(1);
     expect(to(late, MOM)[0]).toMatch(/Rent not marked paid:\nKevin, 40 Elm Rd, Tolland, Unit 2: \$600\nPriya, 7 Pine Ave, Hamden, Unit 3: \$1,600/);
     expect(tick(s, at(12, 7, 9))).toEqual([]); // once only
@@ -61,6 +63,47 @@ describe("a month of rent reminders", () => {
     expect(status).toMatch(/Rent: 1 of 3 paid\./);
     expect(status).toMatch(/Kevin.*December \$600 of \$1,200/);
     expect(status).toMatch(/Priya.*December NOT PAID/);
+  });
+});
+
+describe("rent in plain words", () => {
+  const offline: Ai = { understand: null, find: sampleFind, live: false };
+
+  it("'got it' after a tenant says they paid marks that tenant paid", async () => {
+    const s = fresh();
+    await receive(s, MARIA, "sent the rent on zelle", at(12, 2), offline);
+    const { out } = await receive(s, MOM, "got it, thanks", at(12, 2), offline);
+    expect(to(out, MOM).at(-1)).toMatch(/Marked Maria's December rent paid/);
+    expect(to(out, MARIA).at(-1)).toMatch(/Mom got your December rent/);
+  });
+
+  it("'600 so far' after a tenant says they paid marks part of it", async () => {
+    const s = fresh();
+    await receive(s, KEVIN, "i paid", at(12, 2), offline);
+    const { out } = await receive(s, MOM, "600 so far", at(12, 2), offline);
+    expect(to(out, MOM).at(-1)).toMatch(/Marked \$600 from Kevin for December\. \$600 still to come\./);
+  });
+
+  it("'not yet' doesn't mark anything", async () => {
+    const s = fresh();
+    await receive(s, MARIA, "sent the rent on zelle", at(12, 2), offline);
+    await receive(s, MOM, "not yet", at(12, 2), offline);
+    expect(s.payments ?? []).toHaveLength(0);
+  });
+
+  it("'Kevin paid 600 cash' and 'Maria's rent is 1450, due the 15th' work any time", async () => {
+    const s = fresh();
+    let { out } = await receive(s, MOM, "Kevin paid 600 cash", at(12, 2), offline);
+    expect(to(out, MOM).at(-1)).toMatch(/Marked \$600 \(cash\) from Kevin/);
+    ({ out } = await receive(s, MOM, "Maria's rent is 1450, due the 15th", at(12, 2), offline));
+    expect(to(out, MOM).at(-1)).toMatch(/Set Maria's rent: \$1,450, due the 15th/);
+  });
+
+  it("a tenant's 'already did' after a nudge counts as about rent, not a repair", async () => {
+    const s = fresh();
+    const { out } = await receive(s, KEVIN, "already did yesterday", at(12, 6), offline);
+    expect(s.repairs).toHaveLength(0);
+    expect(to(out, MOM).at(-1)).toMatch(/Kevin .* says about rent/);
   });
 });
 
@@ -89,7 +132,7 @@ describe("tenants and rent", () => {
     const s = fresh();
     const out = handleText(s, MARIA, "sent the rent on zelle this morning", at(12, 2));
     expect(to(out, MARIA)[0]).toMatch(/I've let your landlord know/);
-    expect(to(out, MOM)[0]).toMatch(/Maria .* says about rent: "sent the rent on zelle this morning"\nDecember: \$1,450 not marked paid yet\. Reply PAID MARIA/);
+    expect(to(out, MOM)[0]).toMatch(/Maria .* says about rent: "sent the rent on zelle this morning"\nDecember: \$1,450 isn't marked paid yet\. Let me know once it's in\./);
     expect(s.payments ?? []).toHaveLength(0);
     expect(s.repairs).toHaveLength(0);
   });
@@ -104,19 +147,19 @@ describe("tenants and rent", () => {
 
   it("PAID for an unknown name lists the real ones", () => {
     const out = handleText(fresh(), MOM, "PAID BOB", at(12, 2));
-    expect(to(out, MOM)[0]).toMatch(/Whose rent\? Reply PAID \+ their name: MARIA, KEVIN, PRIYA/);
+    expect(to(out, MOM)[0]).toMatch(/Whose rent\? \(Maria, Kevin, Priya\)/);
   });
 
   it("the landlord sets rent by text, and reminders follow", () => {
     const s = fresh();
     for (const u of s.units) delete u.rent;
     let out = handleText(s, MOM, "RENT", at(11, 10));
-    expect(to(out, MOM)[0]).toMatch(/No rents set up yet\. Text RENT \+ name \+ amount, e\.g\. RENT MARIA 1200/);
+    expect(to(out, MOM)[0]).toMatch(/No rents set up yet\. Tell me like: Maria's rent is 1200, due the 1st\./);
     out = handleText(s, MOM, "rent maria $1,450", at(11, 10));
     expect(to(out, MOM)[0]).toMatch(/Set Maria's rent: \$1,450, due the 1st\. I'll remind them 3 days before/);
     out = handleText(s, MOM, "RENT KEVIN 1200 DUE 15th", at(11, 10));
     expect(to(out, MOM)[0]).toMatch(/Set Kevin's rent: \$1,200, due the 15th/);
-    expect(to(handleText(s, MOM, "RENT BOB 900", at(11, 10)), MOM)[0]).toMatch(/Whose rent\?.*Tenants: MARIA, KEVIN, PRIYA/);
+    expect(to(handleText(s, MOM, "RENT BOB 900", at(11, 10)), MOM)[0]).toMatch(/Whose rent\? \(Maria, Kevin, Priya\)/);
     expect(to(handleText(s, MOM, "RENT KEVIN lots", at(11, 10)), MOM)[0]).toMatch(/How much is Kevin's rent/);
     // Kevin (due the 15th) is reminded on the 12th; Maria on the 28th.
     expect(to(tick(s, at(11, 12, 9)), KEVIN)[0]).toMatch(/due Sun, Nov 15/);

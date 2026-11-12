@@ -1,3 +1,5 @@
+// Same as engine.ts digits(); kept here so rent.ts needs nothing from engine.ts.
+const digits = (phone: string) => phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
 import type { Outbound, Person, State, Unit } from "./types.js";
 
 /**
@@ -53,6 +55,9 @@ export function paidToward(state: State, unitId: string, period: string): number
   return (state.payments ?? []).filter((p) => p.unitId === unitId && p.period === period).reduce((sum, p) => sum + p.amount, 0);
 }
 
+/** "MARIA, KEVIN" -> "Maria, Kevin" */
+const titleList = (names: string) => names.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+
 const rentUnits = (state: State) => state.units.filter((u) => (u.rent ?? 0) > 0);
 const toLandlords = (state: State, body: string): Outbound[] => state.landlords.map((l) => ({ to: l.phone, body }));
 const landlordName = (state: State) => state.landlords[0]?.name ?? "your landlord";
@@ -60,7 +65,7 @@ const landlordName = (state: State) => state.landlords[0]?.name ?? "your landlor
 /** Whether a tenant's text is about rent rather than a repair. */
 export function isRentText(text: string): boolean {
   // Not "check" or "pay" alone: "can someone check the heater" is a repair.
-  return /\b(paid|rent|zelle[ds]?|venmo(ed)?|cash ?app|money order|payment)\b|\bsent (it|you|the money)\b/i.test(text);
+  return /\b(paid|rent|zelle[ds]?|venmo(ed)?|cash ?app|money order|payment)\b|\bsent (it|you|the money)\b|\b(already (did|sent|paid)|did already)\b/i.test(text);
 }
 
 /* ------------------------------ tenant ------------------------------ */
@@ -79,11 +84,47 @@ export function tenantRentText(state: State, unit: Unit, text: string, now: Date
       to: unit.tenant.phone,
       body: `Thanks ${unit.tenant.name}! I've let your landlord know. They'll mark it paid once it shows up.`,
     },
-    ...toLandlords(
+    ...askLandlords(
       state,
-      `${unit.tenant.name} (${unit.address}) says about rent: "${text}"\n${monthName(period)}: ${money(left)} not marked paid yet. Reply PAID ${unit.tenant.name.toUpperCase()} once it's in.`,
+      unit,
+      `${unit.tenant.name} (${unit.address}) says about rent: "${text}"\n${monthName(period)}: ${money(left)} isn't marked paid yet. Let me know once it's in.`,
     ),
   ];
+}
+
+/** Texts the landlords, remembering whose rent they were asked about, so "got it" means that tenant. */
+function askLandlords(state: State, unit: Unit, body: string): Outbound[] {
+  state.pendingPaid = { ...state.pendingPaid, ...Object.fromEntries(state.landlords.map((l) => [digits(l.phone), unit.id])) };
+  return toLandlords(state, body);
+}
+
+/**
+ * A landlord's reply after being asked about a tenant's rent ("got it",
+ * "yes it came in", "600 so far"): the PAID command it means, or null.
+ */
+export function paidFromReply(state: State, from: string, body: string): string | null {
+  const unitId = state.pendingPaid?.[digits(from)];
+  if (!unitId) return null;
+  const unit = state.units.find((u) => u.id === unitId);
+  const text = body.trim();
+  if (!unit || !/^(yes|yep|yeah|yup|ok|okay|sure|got|came|received|paid|it'?s in|in|\$?\d)/i.test(text)) return null;
+  const amount = text.match(/\$?\d[\d,]*(\.\d+)?/)?.[0];
+  return `PAID ${unit.tenant.name.split(/\s+/)[0]}${amount ? ` ${amount}` : ""}`;
+}
+
+/**
+ * Rent said the way people say it: "Kevin paid 600 cash" or "Maria's rent
+ * is 1450, due the 1st". The command it means, or null.
+ */
+export function rentFromWords(state: State, body: string): string | null {
+  const text = body.trim();
+  const name = (w: string) =>
+    state.units.find((u) => u.tenant.name.split(/\s+/)[0]!.toLowerCase() === w.toLowerCase())?.tenant.name.split(/\s+/)[0];
+  const paid = text.match(/^(\w+)\s+(?:just\s+)?paid\b\s*(.*)$/i);
+  if (paid && name(paid[1]!)) return `PAID ${name(paid[1]!)} ${paid[2]}`.trim();
+  const set = text.match(/^(\w+)'?s rent is \$?([\d,]+)(?:.*?\bdue\b\D*(\d{1,2}))?/i);
+  if (set && name(set[1]!)) return `RENT ${name(set[1]!)} ${set[2]}${set[3] ? ` DUE ${set[3]}` : ""}`;
+  return null;
 }
 
 /* ----------------------------- landlord ----------------------------- */
@@ -104,7 +145,7 @@ export function landlordPaid(state: State, landlord: Person, args: string[], now
   const names = rentUnits(state).map((u) => u.tenant.name.split(/\s+/)[0]!.toUpperCase()).join(", ");
   const [who = "", ...rest] = args;
   const unit = findUnit(state, who);
-  if (!unit || !unit.rent) return reply(`Whose rent? Reply PAID + their name: ${names || "(no rents set up)"}`);
+  if (!unit || !unit.rent) return reply(`Whose rent? ${names ? `(${titleList(names)})` : "No rents are set up yet."}`);
 
   const { period } = currentPeriod(unit, now);
   const left = unit.rent - paidToward(state, unit.id, period);
@@ -114,7 +155,7 @@ export function landlordPaid(state: State, landlord: Person, args: string[], now
   if (left <= 0 && !amountWord) {
     return reply(`${unit.tenant.name}'s ${monthName(period)} rent is already marked paid.`);
   }
-  if (!(amount > 0)) return reply(`How much? e.g. PAID ${unit.tenant.name.toUpperCase()} 600`);
+  if (!(amount > 0)) return reply(`How much came in from ${unit.tenant.name}?`);
 
   state.payments = [...(state.payments ?? []), { unitId: unit.id, period, amount, method, at: now.toISOString() }];
   const nowLeft = unit.rent - paidToward(state, unit.id, period);
@@ -158,13 +199,13 @@ export function setRent(state: State, landlord: Person, args: string[]): Outboun
     (u) => u.id.toLowerCase() === w || u.tenant.name.toLowerCase() === w || u.tenant.name.toLowerCase().split(/\s+/)[0] === w,
   );
   const names = state.units.map((u) => u.tenant.name.split(/\s+/)[0]!.toUpperCase()).join(", ");
-  if (!unit) return reply(`Whose rent? Reply RENT + name + amount, e.g. RENT ${names.split(", ")[0] ?? "MARIA"} 1200. Tenants: ${names}`);
+  if (!unit) return reply(`Whose rent? (${titleList(names)}) Tell me like: ${titleList(names).split(", ")[0] ?? "Maria"}'s rent is 1200.`);
   const amountWord = rest.find((x) => /^\$?\d[\d,]*(\.\d+)?$/.test(x));
   const amount = amountWord ? Number(amountWord.replace(/[$,]/g, "")) : NaN;
-  if (!(amount > 0)) return reply(`How much is ${unit.tenant.name}'s rent? e.g. RENT ${unit.tenant.name.split(/\s+/)[0]!.toUpperCase()} 1200`);
+  if (!(amount > 0)) return reply(`How much is ${unit.tenant.name}'s rent?`);
   const dueWord = rest.slice(rest.indexOf(amountWord!) + 1).find((x) => /^\d{1,2}(st|nd|rd|th)?$/i.test(x));
   const due = dueWord ? Number(dueWord.replace(/\D/g, "")) : (unit.rentDue ?? 1);
-  if (due < 1 || due > 31) return reply("The due day should be 1 to 31, e.g. RENT MARIA 1200 DUE 15");
+  if (due < 1 || due > 31) return reply("Which day of the month is it due? (1 to 31)");
   unit.rent = amount;
   unit.rentDue = due;
   const s = settings(state);
@@ -183,7 +224,7 @@ export function rentStatus(state: State, now: Date): string {
   const units = rentUnits(state);
   if (units.length === 0) {
     const first = state.units[0]?.tenant.name.split(/\s+/)[0]?.toUpperCase() ?? "MARIA";
-    return `No rents set up yet. Text RENT + name + amount, e.g. RENT ${first} 1200 (due the 1st), or RENT ${first} 1200 DUE 15.`;
+    return `No rents set up yet. Tell me like: ${first.charAt(0)}${first.slice(1).toLowerCase()}'s rent is 1200, due the 1st.`;
   }
   const since = new Date((state.rentSince ??= now.toISOString()));
   const lines = units.map((u) => {
@@ -249,7 +290,7 @@ export function tickRent(state: State, now: Date): Outbound[] {
         done.push("late");
         out.push({
           to: unit.tenant.phone,
-          body: `Hi ${unit.tenant.name}, ${monthName(period)} rent (${money(left)}, due ${dueText}) isn't marked paid yet. If you've already sent it, reply PAID and I'll let ${landlordName(state)} know.`,
+          body: `Hi ${unit.tenant.name}, ${monthName(period)} rent (${money(left)}, due ${dueText}) isn't marked paid yet. If you've already sent it, just let me know and I'll tell ${landlordName(state)}.`,
         });
         late.push(`${unit.tenant.name}, ${unit.address}: ${money(left)}`);
       }
@@ -259,7 +300,7 @@ export function tickRent(state: State, now: Date): Outbound[] {
     out.push(
       ...toLandlords(
         state,
-        `Rent not marked paid:\n${late.join("\n")}\n\nI sent each a friendly reminder. Reply PAID + name when it comes in, or RENT for everyone.`,
+        `Rent not marked paid:\n${late.join("\n")}\n\nI sent each a friendly reminder. Tell me when any of it comes in (like: Kevin paid).`,
       ),
     );
   }
