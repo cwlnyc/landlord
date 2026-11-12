@@ -184,6 +184,25 @@ notification buzz: keep the page open.
   repair person on the laptop. In person or on a video call, show the laptop
   view instead.
 
+## The always-on demo: npm run demo:publish
+
+A link anyone can open any time, with nothing running on your computer:
+`https://landlordlinedemo.pages.dev`. It's the real bot running in the
+visitor's browser (same engine and wording), with the sample landlord Pat,
+sample search results and no AI, so a visit costs nothing. The visitor is
+Pat; the tenant (Maria) and the plumber (John) are played by the page, with
+tap-to-reply buttons ("Yes", "No", "1, tomorrow 8am") for people who'd
+rather not type. Buttons add another repair or a rent text, and "Behind
+the scenes" shows what the tenant and plumber get.
+
+```bash
+npm run demo:build     # builds demo-site/ (open demo-site/index.html through any local server)
+npm run demo:publish   # puts it on Cloudflare Pages (needs npx --yes wrangler login once)
+```
+
+If the name is taken, `DEMO_PROJECT=another-name npm run demo:publish`.
+Publish again after changing the bot, so the demo shows the latest version.
+
 ## Going live: a real phone number
 
 `npm run live` is the real repair line: the same engine, with texts coming

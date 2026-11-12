@@ -695,7 +695,7 @@ export function showFound(state: State, plan: FindPlan, results: Found[], sample
   return toLandlords(
     state,
     [
-      `${sample ? "SAMPLE RESULTS (search is off). " : ""}${plan.trade.toUpperCase()} near ${plan.town} for #${plan.repairId}, ${plan.urgent ? "who can come now or offer 24/7 service" : "open in the next couple of days"}:`,
+      `${sample ? "SAMPLE RESULTS (not real businesses). " : ""}${plan.trade.toUpperCase()} near ${plan.town} for #${plan.repairId}, ${plan.urgent ? "who can come now or offer 24/7 service" : "open in the next couple of days"}:`,
       ...lines,
       "",
       `Call them, then tell me who you booked and when (like: 1, tomorrow 8am). Numbers and hours come from the web, so double-check before you rely on one.`,

@@ -11,10 +11,13 @@
     "check": "tsx src/check.ts",
     "legal": "node legal/build.mjs",
     "legal:publish": "node legal/publish.mjs",
-    "share": "tsx src/share.ts"
+    "share": "tsx src/share.ts",
+    "demo:build": "esbuild src/demo/app.ts --bundle --format=esm --target=es2020 --outfile=demo-site/app.js --log-level=warning && cp demo/index.html demo-site/index.html",
+    "demo:publish": "node demo/publish.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
