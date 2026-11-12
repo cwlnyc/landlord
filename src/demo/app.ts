@@ -106,7 +106,13 @@ function bubble(m: Msg, me: string) {
 function render() {
   const mine = log.filter((m) => digits(m.to) === digits(PAT) || digits(m.from) === digits(PAT));
   const thread = $("#thread");
-  thread.replaceChildren(...mine.map((m) => bubble(m, PAT)));
+  if (mine.length) thread.replaceChildren(...mine.map((m) => bubble(m, PAT)));
+  else {
+    const hint = document.createElement("p");
+    hint.className = "hint";
+    hint.textContent = "Nothing yet. Tap a tenant button above to have them text in.";
+    thread.replaceChildren(hint);
+  }
   thread.scrollTop = thread.scrollHeight;
 
   const last = [...mine].reverse().find((m) => m.from === "line")?.body;
@@ -140,8 +146,6 @@ async function start() {
   johnSaidNo = false;
   busy = Promise.resolve();
   render();
-  await wait(900);
-  await text(MARIA, "my water is not working");
 }
 
 $("#send").addEventListener("submit", (e) => {
@@ -153,7 +157,8 @@ $("#send").addEventListener("submit", (e) => {
   void text(PAT, body);
 });
 $("#restart").addEventListener("click", () => void start());
-$("#another").addEventListener("click", () => void text(KEVIN, "bedroom door won't close"));
+$("#water").addEventListener("click", () => void text(MARIA, "my water is not working"));
+$("#door").addEventListener("click", () => void text(KEVIN, "bedroom door won't close"));
 $("#rent").addEventListener("click", () => void text(KEVIN, "sent the rent on zelle"));
 
 void start();

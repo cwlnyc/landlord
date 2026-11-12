@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { rmSync } from "node:fs";
 import { findCloudflared, startTunnel } from "./tunnel.js";
 
 /**
@@ -29,6 +30,9 @@ if (!bin) {
   console.error("No cloudflared found. Download it to ~/bin first (see README, Going live, step 4).");
   process.exit(1);
 }
+
+// The demo starts empty every time, so you send the first tenant text yourself.
+if (demo) rmSync(new URL("../data/demo-state.json", import.meta.url), { force: true });
 
 const server = spawn("npx", ["tsx", "src/server.ts"], {
   stdio: ["ignore", "pipe", "inherit"],
