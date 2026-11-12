@@ -54,6 +54,17 @@ function readDay(text: string, now: Date): Date | null | "none" {
 const DAY_WORDS = /\b(today|tomorrow|tmrw|tmr|tomorow|sun|mon|tue|wed|thu|fri|sat)[a-z]*\b|\b\d{1,2}\/\d{1,2}\b/g;
 
 /** Whether a text talks about a day or a time at all ("cant tmrw" does). */
+/**
+ * Whether a text offers another time: a later day or a clock time. "Booked
+ * today" or "can't tonight" only says why not, so it isn't an offer.
+ */
+export function offersTime(input: string): boolean {
+  const text = input.toLowerCase();
+  return /\b(tomorrow|tmrw|tmr|tomorow|noon|morning|afternoon|evening)\b|\b(sun|mon|tue|wed|thu|fri|sat)[a-z]*\b|\b\d{1,2}(:\d{2})?\s*(am|pm)\b|\b\d{1,2}\/\d{1,2}\b|\bafter \d/.test(
+    text,
+  );
+}
+
 export function mentionsTime(input: string): boolean {
   const text = input.toLowerCase();
   return /\b(today|tomorrow|tmrw|tmr|tomorow|noon|morning|afternoon|evening)\b|\b(sun|mon|tue|wed|thu|fri|sat)[a-z]*\b|\b\d{1,2}(:\d{2})?\s*(am|pm)\b|\b\d{1,2}\/\d{1,2}\b/.test(text);

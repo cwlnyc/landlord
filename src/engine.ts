@@ -1,5 +1,5 @@
 import { pickVendor, readContactCard, readContactName, tradeForProblem, tradeLabel } from "./match.js";
-import { formatSlot, mentionsTime, parseVisitTime } from "./parse-time.js";
+import { formatSlot, mentionsTime, offersTime, parseVisitTime } from "./parse-time.js";
 import { isQuietHour } from "./compliance.js";
 import { isRentText, landlordPaid, rentStatus, setRent, tenantRentText, tickRent } from "./rent.js";
 import type { Found, Outbound, Person, Repair, State, Unit, Vendor } from "./types.js";
@@ -202,7 +202,8 @@ function isNo(text: string) {
 }
 /** A repair person's flat no. "cant tmrw, thurs ok?" is an offer, not a no. */
 function isRefusal(text: string) {
-  return isNo(text) && !mentionsTime(text);
+  // "No sorry, booked today" is a no; "can't tmrw, thurs ok?" is an offer.
+  return isNo(text) && !offersTime(text);
 }
 
 /** Whether a tenant's text will start a new repair (not a reply, not rent). */

@@ -95,6 +95,15 @@ describe("when things go sideways", () => {
     expect(to(out, JOHN)[0]).toMatch(/didn't catch the time/);
   });
 
+  it("'no sorry, booked today' is a no: 'today' only says why", () => {
+    const s = fresh();
+    handleText(s, MARIA, "sink leaking", SUNDAY_9PM);
+    handleText(s, MOM, "SEND JOHN", SUNDAY_9PM);
+    handleText(s, JOHN, "no sorry, booked today", SUNDAY_9PM);
+    expect(s.repairs[0]!.status).toBe("new");
+    expect(s.repairs[0]!.tried).toEqual(["JOHN"]);
+  });
+
   it("reads a bare '9 am' as a time, not repair #9", () => {
     const s = fresh();
     s.nextId = 9;
