@@ -1,6 +1,6 @@
 import type { Ai } from "./ai.js";
 import { handleKeyword, prepareOutbound } from "./compliance.js";
-import { LANDLORD_COMMANDS, type TextHints, bookingFromReply, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, sameReply, usableReply } from "./engine.js";
+import { LANDLORD_COMMANDS, type TextHints, bookingFromReply, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, sameReply, usableReply, placeOf } from "./engine.js";
 import { tradeForProblem } from "./match.js";
 import { paidFromReply, rentFromWords } from "./rent.js";
 import type { Outbound, State } from "./types.js";
@@ -111,7 +111,7 @@ async function respond(
     const plan = planFind(state, text, from, now);
     if ("reply" in plan) return { out: [{ to: from, body: plan.reply }], understoodAs };
     // A web search takes a while; say so at once, or it looks broken.
-    await sendNow([{ to: from, body: `Looking for ${plan.trade} near ${plan.town} for #${plan.repairId} now. This takes about a minute.` }]);
+    await sendNow([{ to: from, body: `Looking for ${plan.trade} near ${plan.town} for ${placeOf(state, plan.repairId)} now. This takes about a minute.` }]);
     try {
       const results = await ai.find(plan);
       return { out: showFound(state, plan, results, !ai.live), understoodAs };

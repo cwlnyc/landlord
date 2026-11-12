@@ -25,8 +25,8 @@ describe("the furnace story, by text", () => {
 
     // 1. Tenant reports. Both parents hear about it.
     let out = handleText(s, MARIA, "heat not working", SUNDAY_9PM);
-    expect(to(out, MARIA)[0]).toMatch(/repair #1/);
-    expect(to(out, MOM)[0]).toMatch(/New repair #1 \(sounds urgent\) from Maria/);
+    expect(to(out, MARIA)[0]).toMatch(/I've told your landlord\./);
+    expect(to(out, MOM)[0]).toMatch(/New repair \(sounds urgent\) at 12 Oak St, Naugatuck, Unit 1 \(#1\), from Maria/);
     expect(to(out, DAD)).toHaveLength(1);
 
     // 2. Mom picks the HVAC guy.
@@ -43,7 +43,7 @@ describe("the furnace story, by text", () => {
     out = handleText(s, MARIA, "1", SUNDAY_9PM);
     expect(s.repairs[0]!.status).toBe("confirmed");
     expect(to(out, SAM)[0]).toMatch(/Confirmed/);
-    expect(to(out, MOM)[0]).toMatch(/Confirmed #1/);
+    expect(to(out, MOM)[0]).toMatch(/Confirmed: .* at 12 Oak St, Unit 1 \(#1\)/);
 
     // 5. Visit is the next morning: no reminder right after "confirmed".
     expect(to(out, MARIA)[0]).not.toMatch(/remind you/);
@@ -65,7 +65,7 @@ describe("when things go sideways", () => {
     const out = handleText(s, JOHN, "no sorry booked", SUNDAY_9PM);
     expect(s.repairs[0]!.status).toBe("new");
     // A sink is a plumber's job and no plumber is saved: offer a search.
-    expect(to(out, MOM)[0]).toMatch(/John can't do #1.*Search for plumbers near Naugatuck\?$/);
+    expect(to(out, MOM)[0]).toMatch(/John can't do 12 Oak St, Unit 1 \(#1\).*Search for plumbers near Naugatuck\?$/);
   });
 
   it("tenant can't make it: repair person asked for another time", () => {
@@ -164,5 +164,18 @@ describe("when things go sideways", () => {
   it("anything else from a landlord gets the command list", () => {
     const out = handleText(fresh(), MOM, "hello?", SUNDAY_9PM);
     expect(out[0]!.body).toMatch(/SEND JOHN/);
+  });
+});
+
+describe("repairs are named by address (Rona: 'what unit was that?')", () => {
+  it("with two repairs open, every landlord text says which place it is", () => {
+    const s = fresh();
+    s.welcomed = [MARIA, KEVIN, MOM, DAD, SAM, JOHN].map((p) => p.replace(/\D/g, "").slice(1));
+    handleText(s, MARIA, "my water is not working", SUNDAY_9PM);
+    const out = handleText(s, KEVIN, "bedroom door won't close", SUNDAY_9PM);
+    expect(to(out, MOM)[0]).toMatch(/at 40 Elm Rd, Tolland, Unit 2 \(#2\)/);
+    const list = to(handleText(s, MOM, "LIST", SUNDAY_9PM), MOM)[0]!;
+    expect(list).toMatch(/12 Oak St, Unit 1 \(#1\)/);
+    expect(list).toMatch(/40 Elm Rd, Unit 2 \(#2\)/);
   });
 });

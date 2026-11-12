@@ -44,6 +44,25 @@ function unitOf(state: State, repair: Repair): Unit {
   return unit;
 }
 
+/**
+ * How a landlord's texts name a repair: the place first, the number after as a
+ * short handle for commands ("12 Oak St, Unit 1 (#3)"). With 30 units, "#3"
+ * alone means nothing; the street and unit do.
+ */
+export function placeOf(state: State, repairOrId: Repair | number): string {
+  const repair = typeof repairOrId === "number" ? state.repairs.find((r) => r.id === repairOrId) : repairOrId;
+  if (!repair) return `#${repairOrId}`;
+  const unit = state.units.find((u) => u.id === repair.unitId);
+  if (!unit) return `#${repair.id}`;
+  const town = townOf(unit).toLowerCase();
+  const short = unit.address
+    .split(",")
+    .map((p) => p.trim())
+    .filter((p, i) => p && !(i > 0 && p.toLowerCase() === town))
+    .join(", ");
+  return `${short} (#${repair.id})`;
+}
+
 export function townOf(unit: Unit): string {
   return unit.town ?? unit.address.split(",")[1]?.trim() ?? "";
 }
@@ -246,11 +265,11 @@ function fromTenant(state: State, unit: Unit, text: string, now: Date, hints: Te
   return [
     {
       to: unit.tenant.phone,
-      body: `Got it, thanks ${unit.tenant.name}. I've told your landlord (repair #${repair.id}). You'll get a text when a repair person has a time.`,
+      body: `Got it, thanks ${unit.tenant.name}. I've told your landlord. You'll get a text when a repair person has a time.`,
     },
     ...toLandlords(
       state,
-      `New repair #${repair.id}${repair.urgent ? " (sounds urgent)" : ""} from ${unit.tenant.name}, ${unit.address}:\n"${text}"\n\n${suggest(state, repair)}`,
+      `New repair${repair.urgent ? " (sounds urgent)" : ""} at ${unit.address} (#${repair.id}), from ${unit.tenant.name}:\n"${text}"\n\n${suggest(state, repair)}`,
     ),
   ];
 }
@@ -326,7 +345,7 @@ function tenantConfirms(state: State, repair: Repair, now: Date): Outbound[] {
       to: unit.tenant.phone,
       body: `Great, you're confirmed for ${when}.${repair.reminded ? "" : " I'll remind you the day before."}`,
     },
-    ...toLandlords(state, `Confirmed #${repair.id}: ${vendor?.name ?? "repair person"} at ${unit.address}, ${when}.`),
+    ...toLandlords(state, `Confirmed: ${vendor?.name ?? "repair person"} at ${placeOf(state, repair)}, ${when}.`),
   ];
   if (vendor && vendor.textable !== false) {
     out.push({
@@ -351,7 +370,7 @@ function tenantDeclines(state: State, repair: Repair): Outbound[] {
       { to: unit.tenant.phone, body: "No problem. Your landlord will find another time." },
       ...toLandlords(
         state,
-        `${unit.tenant.name} can't do ${when} for #${repair.id}. Call ${vendor.name} at ${vendor.phone} for another time, then tell me the new day and time.`,
+        `${unit.tenant.name} can't do ${when} at ${placeOf(state, repair)}. Call ${vendor.name} at ${vendor.phone} for another time, then tell me the new day and time.`,
       ),
     ];
   }
@@ -359,7 +378,7 @@ function tenantDeclines(state: State, repair: Repair): Outbound[] {
   repair.status = "asking-vendor";
   const out: Outbound[] = [
     { to: unit.tenant.phone, body: "No problem. I'll ask for another time." },
-    ...toLandlords(state, `${unit.tenant.name} can't do ${when} for #${repair.id}. Asking ${vendor?.name ?? "the repair person"} for another time.`),
+    ...toLandlords(state, `${unit.tenant.name} can't do ${when} at ${placeOf(state, repair)}. Asking ${vendor?.name ?? "the repair person"} for another time.`),
   ];
   if (vendor) {
     out.push({
@@ -410,7 +429,7 @@ function fromVendor(state: State, vendor: Vendor, raw: string, now: Date): Outbo
     repair.tried = [...(repair.tried ?? []), vendor.code];
     return [
       { to: vendor.phone, body: "No problem, thanks for letting us know." },
-      ...toLandlords(state, `${vendor.name} can't do #${repair.id} (${unit.address}). ${suggest(state, repair)}`),
+      ...toLandlords(state, `${vendor.name} can't do ${placeOf(state, repair)}. ${suggest(state, repair)}`),
     ];
   }
 
@@ -428,7 +447,7 @@ function fromVendor(state: State, vendor: Vendor, raw: string, now: Date): Outbo
   return [
     { to: vendor.phone, body: `Thanks! Checking ${when} with the tenant. I'll text you when it's confirmed.` },
     ...offerToTenant(state, repair, vendor, slot),
-    ...toLandlords(state, `${vendor.name} offered ${when} for #${repair.id}. Checking with ${unit.tenant.name}.`),
+    ...toLandlords(state, `${vendor.name} offered ${when} at ${placeOf(state, repair)}. Checking with ${unit.tenant.name}.`),
   ];
 }
 
@@ -454,7 +473,7 @@ function sendTo(state: State, vendor: Vendor, repair: Repair): Outbound[] {
       to: vendor.phone,
       body: `Hi ${vendor.name}, this is the repair line for ${state.landlords[0]?.name ?? "your landlord"}. Job at ${unit.address}: "${repair.text}". When could you go?`,
     },
-    ...toLandlords(state, `Asked ${vendor.name} about #${repair.id}. I'll text you when they reply.`),
+    ...toLandlords(state, `Asked ${vendor.name} about ${placeOf(state, repair)}. I'll text you when they reply.`),
   ];
 }
 
@@ -491,8 +510,8 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
       return toLandlords(
         state,
         wait
-          ? `Got it, #${repair.id} can wait. Searches will look for someone in the next couple of days.`
-          : `Got it, #${repair.id} is urgent. Searches will look for someone who can come now or 24/7.`,
+          ? `Got it, ${placeOf(state, repair)} can wait. Searches will look for someone in the next couple of days.`
+          : `Got it, ${placeOf(state, repair)} is urgent. Searches will look for someone who can come now or 24/7.`,
       );
     }
   }
@@ -559,7 +578,7 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
     const repair = state.repairs.find((r) => r.id === id && OPEN.includes(r.status));
     if (!repair) return reply(`Which one? Reply ${command} + the repair number, e.g. ${command} 3.`);
     repair.status = command === "DONE" ? "done" : "cancelled";
-    return toLandlords(state, `#${repair.id} marked ${repair.status}.`);
+    return toLandlords(state, `${placeOf(state, repair)} marked ${repair.status}.`);
   }
 
   return reply(HELP);
@@ -653,7 +672,7 @@ export function planFind(state: State, text: string, from?: string, now = new Da
   if (!trade) {
     // Remember the question, so a bare "plumber" next is read as the answer.
     if (from) state.pendingFind = { ...state.pendingFind, [digits(from)]: repair.id };
-    return { reply: `What kind of repair person for #${repair.id} ("${repair.text}")?` };
+    return { reply: `What kind of repair person at ${placeOf(state, repair)} ("${repair.text}")?` };
   }
   const unit = unitOf(state, repair);
   return { repairId: repair.id, trade, town: townOf(unit), problem: repair.text, ...neededWhen(repair, now) };
@@ -695,7 +714,7 @@ export function showFound(state: State, plan: FindPlan, results: Found[], sample
   return toLandlords(
     state,
     [
-      `${sample ? "SAMPLE RESULTS (not real businesses). " : ""}${plan.trade.toUpperCase()} near ${plan.town} for #${plan.repairId}, ${plan.urgent ? "who can come now or offer 24/7 service" : "open in the next couple of days"}:`,
+      `${sample ? "SAMPLE RESULTS (not real businesses). " : ""}${plan.trade.toUpperCase()} near ${plan.town} for ${placeOf(state, plan.repairId)}, ${plan.urgent ? "who can come now or offer 24/7 service" : "open in the next couple of days"}:`,
       ...lines,
       "",
       `Call them, then tell me who you booked and when (like: 1, tomorrow 8am). Numbers and hours come from the web, so double-check before you rely on one.`,
@@ -758,7 +777,7 @@ function booked(state: State, landlord: Person, args: string, now: Date): Outbou
     ...offerToTenant(state, repair, vendor, slot),
     ...toLandlords(
       state,
-      `Booked ${vendor.name} for #${repair.id}, ${formatSlot(slot.toISOString())}. Checking with ${unit.tenant.name}. (Saved as ${vendor.code}; I won't text them.)`,
+      `Booked ${vendor.name} for ${placeOf(state, repair)}, ${formatSlot(slot.toISOString())}. Checking with ${unit.tenant.name}. (Saved as ${vendor.code}; I won't text them.)`,
     ),
   ];
 }
@@ -766,7 +785,7 @@ function booked(state: State, landlord: Person, args: string, now: Date): Outbou
 function describe(state: State, r: Repair): string {
   const unit = unitOf(state, r);
   const who = vendorOf(state, r)?.name;
-  const where = `#${r.id} ${unit.address}: "${r.text}"`;
+  const where = `${placeOf(state, r)}: "${r.text}"`;
   switch (r.status) {
     case "new":
       return r.suggested
@@ -810,7 +829,7 @@ export function tick(state: State, now: Date): Outbound[] {
     }
     if (!r.checkedBack && now.getTime() - at >= 4 * HOUR) {
       r.checkedBack = true;
-      out.push(...toLandlords(state, `Did ${vendor?.name ?? "the repair person"} fix #${r.id} at ${unit.address}? Reply DONE ${r.id} if so.`));
+      out.push(...toLandlords(state, `Did ${vendor?.name ?? "the repair person"} fix ${placeOf(state, r)}? Reply DONE ${r.id} if so.`));
     }
   }
   out.push(...tickRent(state, now));

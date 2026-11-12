@@ -33,7 +33,7 @@ function samSaysNo(s: State) {
 describe("FIND and BOOKED: when the usual person can't come", () => {
   it("offers FIND when the repair person says no", () => {
     const s = fresh();
-    expect(to(samSaysNo(s), MOM)[0]).toMatch(/Sam can't do #1.*No one else saved does HVAC work\. Search for HVAC companies near Naugatuck\?$/);
+    expect(to(samSaysNo(s), MOM)[0]).toMatch(/Sam can't do 12 Oak St, Unit 1 \(#1\).*No one else saved does HVAC work\. Search for HVAC companies near Naugatuck\?$/);
   });
 
   it("plans a search for the right repair, trade and town", () => {
@@ -55,7 +55,7 @@ describe("FIND and BOOKED: when the usual person can't come", () => {
     const s = fresh();
     samSaysNo(s);
     const found = await receive(s, MOM, "FIND HVAC", SUNDAY_9PM, offline);
-    expect(to(found.out, MOM)[0]).toMatch(/^Looking for HVAC near Naugatuck for #1 now/);
+    expect(to(found.out, MOM)[0]).toMatch(/^Looking for HVAC near Naugatuck for 12 Oak St, Unit 1 \(#1\) now/);
     const list = to(found.out, MOM)[1]!;
     expect(list).toMatch(/SAMPLE RESULTS/);
     expect(list).toMatch(/1\. Naugatuck HVAC Pros \(sample\) 4\.9★ \(190 reviews\), 24\/7 emergency service\n {3}\(203\) 555-0191/);
@@ -156,7 +156,7 @@ describe("messy texts and the AI", () => {
     samSaysNo(s);
     const ai: Ai = { understand: async () => "FIND hvac 1", find: sampleFind, live: false };
     const { out } = await receive(s, MOM, "can you look for another heating guy", SUNDAY_9PM, ai);
-    expect(to(out, MOM)[1]).toMatch(/HVAC near Naugatuck for #1, who can come now or offer 24\/7 service:/);
+    expect(to(out, MOM)[1]).toMatch(/HVAC near Naugatuck for 12 Oak St, Unit 1 \(#1\), who can come now or offer 24\/7 service:/);
   });
 });
 
@@ -175,19 +175,19 @@ describe("FIND in context (from the family test)", () => {
     const s = withSavedPlumber();
     handleText(s, MARIA, "kitchen sink is leaking", SUNDAY_9PM);
     const { out } = await receive(s, MOM, "find", SUNDAY_9PM, offline);
-    expect(to(out, MOM)[0]).toMatch(/^Looking for plumber near Naugatuck for #1 now/);
-    expect(to(out, MOM)[1]).toMatch(/PLUMBER near Naugatuck for #1, who can come now/);
+    expect(to(out, MOM)[0]).toMatch(/^Looking for plumber near Naugatuck for 12 Oak St, Unit 1 \(#1\) now/);
+    expect(to(out, MOM)[1]).toMatch(/PLUMBER near Naugatuck for 12 Oak St, Unit 1 \(#1\), who can come now/);
   });
 
   it("when it has to ask, the next word is the answer, even if a saved code matches it", async () => {
     const s = withSavedPlumber();
     handleText(s, MARIA, "weird noise in the wall", SUNDAY_9PM);
     let { out } = await receive(s, MOM, "FIND", SUNDAY_9PM, offline);
-    expect(to(out, MOM)[0]).toMatch(/What kind of repair person for #1 \("weird noise in the wall"\)\?/);
+    expect(to(out, MOM)[0]).toMatch(/What kind of repair person at 12 Oak St, Unit 1 \(#1\) \("weird noise in the wall"\)\?/);
     // An AI that would misread it, like it did for Dad, must not be asked.
     const wouldMisread: Ai = { understand: async () => "SEND PLUMBER 1", find: sampleFind, live: false };
     ({ out } = await receive(s, MOM, "plumber", SUNDAY_9PM, wouldMisread));
-    expect(to(out, MOM)[0]).toMatch(/^Looking for plumber near Naugatuck for #1 now/);
+    expect(to(out, MOM)[0]).toMatch(/^Looking for plumber near Naugatuck for 12 Oak St, Unit 1 \(#1\) now/);
     expect(s.repairs[0]!.status).toBe("new"); // nobody was sent
     expect(s.pendingFind).toEqual({});
   });
@@ -247,11 +247,11 @@ describe("the landlord does the least work (Dad's wish)", () => {
     expect(to(out, PLUMBER)[0]).toMatch(/my waters not working/);
 
     ({ out } = await receive(s, PLUMBER, "no sorry", SUNDAY_9PM, offline));
-    expect(to(out, MOM)[0]).toMatch(/Test Plumber can't do #1.*No one else saved does plumber work\. Search for plumbers near Naugatuck\?$/);
+    expect(to(out, MOM)[0]).toMatch(/Test Plumber can't do 12 Oak St, Unit 1 \(#1\).*No one else saved does plumber work\. Search for plumbers near Naugatuck\?$/);
 
     ({ out } = await receive(s, MOM, "yes", SUNDAY_9PM, offline));
-    expect(to(out, MOM)[0]).toMatch(/^Looking for plumber near Naugatuck for #1 now/);
-    expect(to(out, MOM)[1]).toMatch(/PLUMBER near Naugatuck for #1, who can come now or offer 24\/7 service:\n1\./);
+    expect(to(out, MOM)[0]).toMatch(/^Looking for plumber near Naugatuck for 12 Oak St, Unit 1 \(#1\) now/);
+    expect(to(out, MOM)[1]).toMatch(/PLUMBER near Naugatuck for 12 Oak St, Unit 1 \(#1\), who can come now or offer 24\/7 service:\n1\./);
   });
 
   it("the AI picks the trade when the words don't say", async () => {
@@ -280,7 +280,7 @@ describe("the landlord does the least work (Dad's wish)", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     const ai: Ai = { understand: null, find: sampleFind, live: true, triage: async () => { throw new Error("529"); } };
     const { out } = await receive(s, MARIA, "half the apartment went dark", SUNDAY_9PM, ai);
-    expect(to(out, MOM)[0]).toMatch(/New repair #1/);
+    expect(to(out, MOM)[0]).toMatch(/New repair at 12 Oak St, Naugatuck, Unit 1 \(#1\)/);
   });
 });
 
@@ -290,7 +290,7 @@ describe("replies a person would actually write", () => {
     samSaysNo(s);
     await receive(s, MOM, "FIND HVAC", SUNDAY_9PM, offline);
     const { out } = await receive(s, MOM, "1, tomorrow 8am", SUNDAY_9PM, offline);
-    expect(to(out, MOM)[0]).toMatch(/Booked Naugatuck HVAC Pros \(sample\) for #1, Mon, Nov 9, 8:00 AM/);
+    expect(to(out, MOM)[0]).toMatch(/Booked Naugatuck HVAC Pros \(sample\) for 12 Oak St, Unit 1 \(#1\), Mon, Nov 9, 8:00 AM/);
     expect(to(out, MARIA)[0]).toMatch(/Will you be home then\?/);
   });
 
@@ -338,7 +338,7 @@ describe("what's urgent", () => {
   it("the AI catches urgent jobs the word list misses: 'it's freezing in here'", async () => {
     const s = fresh();
     const { out } = await receive(s, MARIA, "it's freezing in here", SUNDAY_9PM, triageSays("HVAC", true));
-    expect(to(out, MOM)[0]).toMatch(/^New repair #1 \(sounds urgent\)/);
+    expect(to(out, MOM)[0]).toMatch(/^New repair \(sounds urgent\) at /);
     expect(planFind(s, "FIND", undefined, SUNDAY_9PM)).toMatchObject({ urgent: true, trade: "HVAC" });
   });
 
@@ -360,12 +360,12 @@ describe("what's urgent", () => {
     const s = fresh();
     await receive(s, MARIA, "no heat at all", SUNDAY_9PM, offline);
     let { out } = await receive(s, MOM, "it can wait", SUNDAY_9PM, offline);
-    expect(to(out, MOM)[0]).toMatch(/Got it, #1 can wait/);
+    expect(to(out, MOM)[0]).toMatch(/Got it, .* \(#1\) can wait/);
     expect(planFind(s, "FIND", undefined, SUNDAY_9PM)).toMatchObject({ urgent: false });
 
     await receive(s, KEVIN, "closet door is off its track", SUNDAY_9PM, offline);
     ({ out } = await receive(s, MOM, "#2 is urgent", SUNDAY_9PM, offline));
-    expect(to(out, MOM)[0]).toMatch(/Got it, #2 is urgent/);
+    expect(to(out, MOM)[0]).toMatch(/Got it, .* \(#2\) is urgent/);
     expect(s.repairs[1]!.urgent).toBe(true);
     ({ out } = await receive(s, MOM, "no rush on 2", SUNDAY_9PM, offline));
     expect(s.repairs[1]!.urgent).toBe(false);

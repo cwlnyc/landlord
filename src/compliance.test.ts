@@ -92,7 +92,7 @@ describe("no automatic texts at night", () => {
     handleText(s, MARIA, "1", at(8, 12));
     expect(tick(s, at(9, 23))).toEqual([]); // 5h after the visit, but night
     expect(tick(s, at(10, 7))).toEqual([]);
-    expect(to(tick(s, at(10, 8)), MOM)[0]).toMatch(/Did Sam fix #1/);
+    expect(to(tick(s, at(10, 8)), MOM)[0]).toMatch(/Did Sam fix 12 Oak St, Unit 1 \(#1\)\?/);
   });
 
   it("quiet hours are 9pm to 8am", () => {

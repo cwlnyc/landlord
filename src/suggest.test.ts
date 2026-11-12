@@ -43,11 +43,11 @@ describe("the bot suggests who to send", () => {
     handleText(s, KEVIN, "bedroom door won't close", NOW);
     handleText(s, MOM, "yes", NOW);
     let out = handleText(s, ROB, "no sorry", NOW);
-    expect(to(out, MOM)[0]).toMatch(/Rob can't do #1.*Send John \(handyman\)\?$/);
+    expect(to(out, MOM)[0]).toMatch(/Rob can't do .* \(#1\).*Send John \(handyman\)\?$/);
     handleText(s, MOM, "yes", NOW);
     out = handleText(s, "+1 203 555 0302", "no", NOW);
     // A door is handyman work with no search trade, so it asks what kind.
-    expect(to(out, MOM)[0]).toMatch(/John can't do #1.*What kind of repair person should I look for, near Tolland\?$/);
+    expect(to(out, MOM)[0]).toMatch(/John can't do .* \(#1\).*What kind of repair person should I look for, near Tolland\?$/);
   });
 
   it("no one saved fits: says so and offers FIND", () => {
