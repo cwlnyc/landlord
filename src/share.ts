@@ -55,8 +55,8 @@ for (let i = 0; i < 60 && !(await fetch(`http://localhost:${PORT}/api/state`).th
 try {
   const { url, child } = await startTunnel(bin, PORT);
   child.on("exit", () => {
-    console.error("\nThe tunnel stopped. Run npm run share again for a new link.");
-    stop();
+    console.error(`\nThe tunnel stopped, so the phone links don't work anymore. The laptop view still does: http://localhost:${PORT}`);
+    console.error("Run npm run share again for new phone links.");
   });
   process.on("exit", () => child.kill());
   const state = (await (await fetch(`http://localhost:${PORT}/api/state`)).json()) as {
@@ -74,6 +74,8 @@ try {
   console.log("The laptop view (clock buttons, every phone at once) is http://localhost:" + PORT);
   console.log("Ctrl+C ends the test; the link stops working.\n");
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error);
-  stop();
+  // No tunnel means no phone links, but the laptop view still works.
+  console.error(`\nCouldn't open the tunnel, so there are no phone links this time:\n${error instanceof Error ? error.message : error}`);
+  console.log(`\nThe laptop view still works: http://localhost:${PORT}`);
+  console.log("Ctrl+C to stop. Run npm run share again to retry the phone links.\n");
 }
