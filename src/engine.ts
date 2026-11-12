@@ -479,9 +479,16 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
       : state.repairs.find((r) => r.id === id && r.status === "new" && r.suggested);
     if (!repair) return reply("There's nothing waiting on a yes or no. Reply LIST to see open repairs.");
     if (NO_WORDS.includes(command)) {
+      const declined = repair.suggested;
       delete repair.suggested;
       const unit = unitOf(state, repair);
-      return reply(`OK. Reply SEND + who to ask (${vendorList(state)}), or FIND + a trade to search near ${townOf(unit)}.`);
+      if (declined === SUGGEST_SEARCH) {
+        return reply(`OK, no search. Reply SEND + who to ask (${vendorList(state)}), or FIND + another trade.`);
+      }
+      // Skip the person they turned down, and offer the next step as a YES:
+      // the next saved person who fits, or a search.
+      repair.tried = [...(repair.tried ?? []), declined!];
+      return reply(`OK, not ${state.vendors.find((v) => v.code === declined)?.name ?? "them"}. ${suggest(state, repair)}`);
     }
     const vendor = state.vendors.find((v) => v.code === repair.suggested);
     if (!vendor) return reply(`Who should I ask? Reply SEND + one of: ${vendorList(state)}`);

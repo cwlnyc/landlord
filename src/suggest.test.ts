@@ -59,12 +59,28 @@ describe("the bot suggests who to send", () => {
     expect(s.repairs[0]!.suggested).toBe("FIND");
   });
 
-  it("NO keeps the repair waiting and shows the options", () => {
+  it("NO to a suggested person offers the next step as a YES: here, a search", () => {
     const s = fresh();
     handleText(s, MARIA, "heat not working", NOW);
     const out = handleText(s, MOM, "no", NOW);
-    expect(to(out, MOM)[0]).toMatch(/OK\. Reply SEND/);
+    expect(to(out, MOM)[0]).toMatch(/^OK, not Sam\. No one else saved does HVAC work\. Search for HVAC companies near Naugatuck\? Reply YES\./);
     expect(s.repairs[0]!.status).toBe("new");
+    expect(s.repairs[0]!.suggested).toBe("FIND");
+    expect(s.repairs[0]!.tried).toEqual(["HVAC"]);
+  });
+
+  it("NO to a suggested person offers the next one who fits", () => {
+    const s = fresh();
+    handleText(s, KEVIN, "bedroom door won't close", NOW); // Tolland: Rob first
+    const out = handleText(s, MOM, "nope", NOW);
+    expect(to(out, MOM)[0]).toMatch(/^OK, not Rob\. Send John \(handyman\)\? Reply YES\./);
+  });
+
+  it("NO to a search keeps it waiting for the landlord's pick", () => {
+    const s = fresh();
+    handleText(s, MARIA, "outlet sparking in kitchen", NOW); // no electrician saved
+    const out = handleText(s, MOM, "no", NOW);
+    expect(to(out, MOM)[0]).toMatch(/^OK, no search\. Reply SEND/);
     expect(s.repairs[0]!.suggested).toBeUndefined();
   });
 
