@@ -2,7 +2,7 @@ import type { Ai } from "./ai.js";
 import { handleKeyword, prepareOutbound } from "./compliance.js";
 import { LANDLORD_COMMANDS, type TextHints, bookingFromReply, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, sameReply, usableReply, placeOf } from "./engine.js";
 import { tradeForProblem } from "./match.js";
-import { paidFromReply, rentFromWords } from "./rent.js";
+import { notYetReply, paidFromReply, rentFromWords } from "./rent.js";
 import type { Outbound, State } from "./types.js";
 
 /**
@@ -75,11 +75,13 @@ async function respond(
   // Rent said plainly: "got it" after "let me know once it's in", or
   // "Kevin paid 600 cash" / "Maria's rent is 1450" any time.
   if (isLandlord) {
+    const notYet = notYetReply(state, from, text);
     const paid = paidFromReply(state, from, text);
     if (state.pendingPaid?.[digits(from)]) {
       const { [digits(from)]: _, ...others } = state.pendingPaid;
       state.pendingPaid = others;
     }
+    if (notYet) return { out: [{ to: from, body: notYet }] };
     const plain = paid ?? rentFromWords(state, text);
     if (plain) text = plain;
   }

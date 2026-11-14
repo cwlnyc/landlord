@@ -371,3 +371,23 @@ describe("what's urgent", () => {
     expect(s.repairs[1]!.urgent).toBe(false);
   });
 });
+
+describe("search results, best first (Mom picks by reviews and rating)", () => {
+  it("ranks a well-reviewed 4.9 above a 5.0 with three reviews, and unrated last; BOOKED 1 is the top one", async () => {
+    const s = fresh();
+    handleText(s, MARIA, "heat not working", SUNDAY_9PM);
+    const results = [
+      { name: "New Guy", phone: "(203) 555-0001", rating: 5, reviews: 3 },
+      { name: "No Stars", phone: "(203) 555-0002" },
+      { name: "Old Reliable", phone: "(203) 555-0003", rating: 4.9, reviews: 190 },
+      { name: "Okay Co", phone: "(203) 555-0004", rating: 4.2, reviews: 400 },
+    ];
+    const ai: Ai = { understand: null, find: async () => results, live: true };
+    const { out } = await receive(s, MOM, "FIND HVAC", SUNDAY_9PM, ai);
+    const list = out.filter((o) => o.to === MOM).map((o) => o.body).find((b) => /near Naugatuck for/.test(b) && /\n1\./.test(b))!;
+    const order = [...list.matchAll(/^\d\. ([^\d★,\n]+?)(?: \d|,|\n)/gm)].map((m) => m[1]);
+    expect(order).toEqual(["Old Reliable", "Okay Co", "New Guy", "No Stars"]);
+    await receive(s, MOM, "1, tomorrow 8am", SUNDAY_9PM, ai);
+    expect(s.vendors.some((v) => v.name === "Old Reliable")).toBe(true);
+  });
+});

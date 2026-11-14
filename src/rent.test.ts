@@ -137,6 +137,16 @@ describe("tenants and rent", () => {
     expect(s.repairs).toHaveLength(0);
   });
 
+  it("'not yet' keeps it unpaid and says so, instead of a confusing answer", async () => {
+    const s = fresh();
+    handleText(s, MARIA, "sent the rent on zelle this morning", at(12, 2));
+    const ai: Ai = { understand: null, find: sampleFind, live: false };
+    const { out } = await receive(s, MOM, "not yet", at(12, 2), ai);
+    expect(to(out, MOM).at(-1)).toBe("OK, Maria's rent stays not paid. Tell me when it comes in (like: Maria paid).");
+    expect(s.payments ?? []).toHaveLength(0);
+    expect(s.pendingPaid?.["2035550101"]).toBeUndefined();
+  });
+
   it("repair texts aren't mistaken for rent", () => {
     expect(isRentText("can someone check the heater")).toBe(false);
     expect(isRentText("sink is leaking")).toBe(false);

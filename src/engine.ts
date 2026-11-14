@@ -807,7 +807,20 @@ function askBooking(state: State, repairId: number, code?: string) {
 }
 
 /** Shows search results as a numbered list to call. Keeps them for BOOKED. */
-export function showFound(state: State, plan: FindPlan, results: Found[], sample = false): Outbound[] {
+/**
+ * How a landlord picks from a list (Mom: "number of reviews and the rating"):
+ * the rating, pulled toward an ordinary 4.0 until enough reviews back it up.
+ * So 4.9 from 190 reviews beats 5.0 from 3. No rating at all goes last.
+ */
+export function standing(f: Found): number {
+  if (!f.rating) return -1;
+  const reviews = f.reviews ?? 0;
+  return (f.rating * reviews + 4.0 * 20) / (reviews + 20);
+}
+
+export function showFound(state: State, plan: FindPlan, found: Found[], sample = false): Outbound[] {
+  // Best first, so "1" is the one to call first. Stable: equal scores keep the search's order.
+  const results = [...found].sort((a, b) => standing(b) - standing(a));
   if (results.length === 0) {
     return toLandlords(state, `I couldn't find any ${plan.trade} near ${plan.town}. Try FIND with a different trade or a bigger town nearby.`);
   }

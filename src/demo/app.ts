@@ -7,7 +7,9 @@
  * so tapping the link is the whole setup. Nothing is sent anywhere.
  */
 
+import { prepareOutbound } from "../compliance.js";
 import { receive } from "../interpret.js";
+import { currentPeriod, tickRent } from "../rent.js";
 import type { Found, Outbound, State } from "../types.js";
 import seed from "../../data/demo.json" with { type: "json" };
 import { SAMPLE_PHOTO } from "../sample-photo.js";
@@ -83,6 +85,9 @@ async function actors(out: Outbound[]) {
       } else if (/Which works for you\?/.test(o.body)) {
         await wait(1800);
         void text(o.to, "wed works");
+      } else if (/isn't marked paid yet/.test(o.body)) {
+        await wait(2200);
+        void text(o.to, "oh sorry! sending the rent tonight");
       }
     } else if (to === digits(JOHN)) {
       if (/Job at .*When could you go\?/.test(o.body)) {
@@ -108,6 +113,7 @@ async function actors(out: Outbound[]) {
 function chipsFor(last: string | undefined): string[] {
   if (!last) return [];
   if (/tell me who you booked/i.test(last)) return ["1, tomorrow 8am", "2, tomorrow 9am"];
+  if (/Rent not marked paid/i.test(last)) return ["Kevin paid", "Kevin paid 600"];
   if (/Let me know once it's in/i.test(last)) return ["Got it", "Not yet", "600 so far"];
   if (/\?$/.test(last.trim())) return ["Yes", "No"];
   return [];
@@ -181,6 +187,29 @@ $("#send").addEventListener("submit", (e) => {
 $("#restart").addEventListener("click", () => void start());
 $("#water").addEventListener("click", () => void text(MARIA, "my water is not working"));
 $("#door").addEventListener("click", () => void text(KEVIN, "bedroom door won't close"));
-$("#rent").addEventListener("click", () => void text(KEVIN, "sent the rent on zelle"));
+$("#rent").addEventListener("click", () => void rentDay());
+
+/**
+ * Rent the way it really goes (Mom): tenants don't text "I paid", the money
+ * just shows up in the bank. Five days after it's due, the line tells the
+ * landlord whose rent isn't marked yet and nudges that tenant. Here Maria and
+ * Priya's came in, Kevin's didn't.
+ */
+function rentDay() {
+  busy = busy.then(async () => {
+    const kevin = state.units.find((u) => digits(u.tenant.phone) === digits(KEVIN))!;
+    const { period, due } = currentPeriod(kevin, new Date());
+    const lateCheck = new Date(due.getFullYear(), due.getMonth(), due.getDate() + 5, 9);
+    state.rentSince = new Date(due.getTime() - 86_400_000).toISOString();
+    state.payments = (state.payments ?? []).filter((p) => p.period !== period);
+    for (const u of state.units) {
+      if (u.id !== kevin.id && u.rent) state.payments.push({ unitId: u.id, period, amount: u.rent, method: "bank", at: due.toISOString() });
+    }
+    const out = prepareOutbound(state, tickRent(state, lateCheck), new Date());
+    record(out);
+    await actors(out);
+  });
+  return busy;
+}
 
 void start();

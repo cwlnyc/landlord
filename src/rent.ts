@@ -113,6 +113,18 @@ export function paidFromReply(state: State, from: string, body: string): string 
 }
 
 /**
+ * A landlord's "not yet" after being asked about a tenant's rent: the reply
+ * that says it stays unpaid, or null when the text isn't a not-yet.
+ */
+export function notYetReply(state: State, from: string, body: string): string | null {
+  const unitId = state.pendingPaid?.[digits(from)];
+  const unit = unitId ? state.units.find((u) => u.id === unitId) : undefined;
+  if (!unit || !/^(no|not yet|nope|nah|nothing( yet)?|hasn'?t|didn'?t|not in|still no)\b/i.test(body.trim())) return null;
+  const first = unit.tenant.name.split(/\s+/)[0];
+  return `OK, ${first}'s rent stays not paid. Tell me when it comes in (like: ${first} paid).`;
+}
+
+/**
  * Rent said the way people say it: "Kevin paid 600 cash" or "Maria's rent
  * is 1450, due the 1st". The command it means, or null.
  */
