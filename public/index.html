@@ -89,15 +89,24 @@ function fmt(iso) {
   return new Date(iso).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+// How many log entries each render has already seen, so only new texts move the boxes.
+let seen = null;
+
 function render() {
   document.getElementById("clock").textContent = "Simulated time: " + fmt(data.now);
   document.getElementById("ai").textContent = data.ai ? "AI on" : "AI off: sample search results";
+  const fresh = seen === null || data.log.length < seen ? [] : data.log.slice(seen).filter((m) => m.from === "repair line");
+  seen = data.log.length;
   for (const phone of document.querySelectorAll(".phone")) {
     const select = phone.querySelector("select");
     const list = people(phone.dataset.role);
     const chosen = select.value;
     select.replaceChildren(...list.map((p) => new Option(p.label, p.phone)));
     if (chosen && list.some((p) => p.phone === chosen)) select.value = chosen;
+    // Follow the conversation: when the line texts someone in this box, show them,
+    // so the reply goes out as the right person (John, not whoever is first).
+    const latest = [...fresh].reverse().find((m) => list.some((p) => digits(p.phone) === digits(m.to)));
+    if (latest) select.value = list.find((p) => digits(p.phone) === digits(latest.to)).phone;
     const me = digits(select.value);
     const thread = phone.querySelector(".thread");
     const atBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;

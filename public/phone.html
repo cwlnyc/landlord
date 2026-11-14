@@ -123,7 +123,7 @@ function draw(data) {
           el.append(t);
           return el;
         })
-      : [Object.assign(document.createElement("p"), { className: "empty", textContent: "No texts yet. Send one, like a tenant would: “my sink is leaking”." })]),
+      : [Object.assign(document.createElement("p"), { className: "empty", textContent: data.state.landlords.some((l) => digits(l.phone) === me) ? "No texts yet. When a tenant reports a problem, it shows up here." : "No texts yet. Send one, like a tenant would: “my sink is leaking”." })]),
   );
   thread.scrollTop = thread.scrollHeight;
 }
