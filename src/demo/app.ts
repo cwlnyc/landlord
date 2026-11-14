@@ -10,6 +10,9 @@
 import { receive } from "../interpret.js";
 import type { Found, Outbound, State } from "../types.js";
 import seed from "../../data/demo.json" with { type: "json" };
+import { SAMPLE_PHOTO } from "../sample-photo.js";
+
+const PHOTO = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(SAMPLE_PHOTO)}`;
 
 const PAT = "+1 203 555 0101";
 const MARIA = "+1 203 555 0201";
@@ -20,7 +23,7 @@ const NAMES: Record<string, string> = { [PAT]: "Pat", [MARIA]: "Maria", [KEVIN]:
 const digits = (p: string) => p.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
 const nameOf = (p: string) => NAMES[Object.keys(NAMES).find((k) => digits(k) === digits(p)) ?? ""] ?? "Someone";
 
-type Msg = { from: string; to: string; body: string; at: Date };
+type Msg = { from: string; to: string; body: string; at: Date; media?: string[] };
 
 // Sample businesses: obviously sample, so nobody calls a made-up number.
 const sampleFind = async (plan: { trade: string; town: string; urgent: boolean }): Promise<Found[]> => {
@@ -39,17 +42,17 @@ const ai = { understand: null, find: sampleFind, live: false };
 
 let state: State;
 let log: Msg[];
-let johnSaidNo: boolean;
+let robSaidNo: boolean;
 let busy = Promise.resolve();
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** One text into the bot; the replies go into the log, and the page's people answer theirs. */
-function text(from: string, body: string) {
+function text(from: string, body: string, media: string[] = []) {
   busy = busy.then(async () => {
-    log.push({ from, to: "line", body, at: new Date() });
-    const { out } = await receive(state, from, body, new Date(), ai, false, async (early) => record(early));
+    log.push({ from, to: "line", body, at: new Date(), ...(media.length ? { media } : {}) });
+    const { out } = await receive(state, from, body, new Date(), ai, false, async (early) => record(early), media);
     record(out);
     render();
     await actors(out);
@@ -58,11 +61,15 @@ function text(from: string, body: string) {
 }
 
 function record(out: Outbound[]) {
-  for (const o of out) log.push({ from: "line", to: o.to, body: o.body, at: new Date() });
+  for (const o of out) log.push({ from: "line", to: o.to, body: o.body, at: new Date(), ...(o.media?.length ? { media: o.media } : {}) });
   render();
 }
 
-/** Maria and John answer the way people do, a moment later. */
+/**
+ * The tenants and repair people answer the way they really do, a moment
+ * later. John works like Mom's plumber: he asks for a picture first, then
+ * offers two times. Rob can't come, which is when the search helps.
+ */
 async function actors(out: Outbound[]) {
   for (const o of out) {
     const to = digits(o.to);
@@ -70,12 +77,26 @@ async function actors(out: Outbound[]) {
       if (/Will you be home then\?/.test(o.body)) {
         await wait(1800);
         void text(o.to, "yeah I'll be here");
+      } else if (/asks: /.test(o.body)) {
+        await wait(2200);
+        void text(o.to, "here, it's dripping under the sink", [PHOTO]);
+      } else if (/Which works for you\?/.test(o.body)) {
+        await wait(1800);
+        void text(o.to, "wed works");
       }
-    } else if (to === digits(JOHN) || to === digits(ROB)) {
+    } else if (to === digits(JOHN)) {
+      if (/Job at .*When could you go\?/.test(o.body)) {
+        await wait(2000);
+        void text(o.to, "what's the issue? can I see a pic?");
+      } else if (/When could you go to /.test(o.body)) {
+        await wait(2400);
+        void text(o.to, "ok I see it, just a loose fitting. I can do tue 9am or wed 2pm");
+      }
+    } else if (to === digits(ROB)) {
       if (/When could you go\?/.test(o.body)) {
         await wait(2000);
-        const first = to === digits(JOHN) && !johnSaidNo;
-        if (first) johnSaidNo = true;
+        const first = !robSaidNo;
+        robSaidNo = true;
         void text(o.to, first ? "no sorry, booked today" : "tomorrow 10am");
       }
     }
@@ -97,6 +118,7 @@ function bubble(m: Msg, me: string) {
   const mine = digits(m.from) === digits(me);
   el.className = `msg ${mine ? "out" : "in"}`;
   el.textContent = m.body;
+  for (const src of m.media ?? []) el.append(Object.assign(document.createElement("img"), { src, alt: "Photo" }));
   const t = document.createElement("time");
   t.textContent = m.at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
   el.append(t);
@@ -134,7 +156,7 @@ function render() {
       const who = m.from === "line" ? `Line → ${nameOf(m.to)}` : `${nameOf(m.from)} → Line`;
       row.innerHTML = "<b></b> <span></span>";
       row.querySelector("b")!.textContent = who + ":";
-      row.querySelector("span")!.textContent = m.body;
+      row.querySelector("span")!.textContent = m.body + (m.media?.length ? " [photo]" : "");
       return row;
     }),
   );
@@ -143,7 +165,7 @@ function render() {
 async function start() {
   state = structuredClone(seed) as State;
   log = [];
-  johnSaidNo = false;
+  robSaidNo = false;
   busy = Promise.resolve();
   render();
 }

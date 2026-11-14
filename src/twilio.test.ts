@@ -1,4 +1,4 @@
-import { isFromTwilio, signatureFor, toE164 } from "./twilio.js";
+import { isFromTwilio, readInbound, sendSms, signatureFor, toE164 } from "./twilio.js";
 
 describe("Twilio webhook signatures", () => {
   const token = "12345";
@@ -38,4 +38,37 @@ it.each([
   ["12035550101", "+12035550101"],
 ])("%s -> %s", (input, out) => {
   expect(toE164(input)).toBe(out);
+});
+
+describe("picture messages", () => {
+  const cfg = { accountSid: "AC1", authToken: "t", from: "+12035550000" };
+
+  it("a tenant's photo comes in as a link, next to the words", async () => {
+    const got = await readInbound(cfg, {
+      From: "+12035550201",
+      Body: "here",
+      NumMedia: "2",
+      MediaContentType0: "image/jpeg",
+      MediaUrl0: "https://api.twilio.com/media/1",
+      MediaContentType1: "video/mp4",
+      MediaUrl1: "https://api.twilio.com/media/2",
+    });
+    expect(got).toEqual({ from: "+12035550201", text: "here", media: ["https://api.twilio.com/media/1", "https://api.twilio.com/media/2"] });
+  });
+
+  it("sends each photo as a MediaUrl", async () => {
+    let sent = "";
+    vi.stubGlobal("fetch", async (_url: string, init: { body: URLSearchParams }) => {
+      sent = init.body.toString();
+      return new Response("{}", { status: 201 });
+    });
+    try {
+      await sendSms(cfg, "+1 203 555 0302", "Maria sent this", ["https://x.test/a.jpg", "https://x.test/b.jpg"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    const form = new URLSearchParams(sent);
+    expect(form.getAll("MediaUrl")).toEqual(["https://x.test/a.jpg", "https://x.test/b.jpg"]);
+    expect(form.get("Body")).toBe("Maria sent this");
+  });
 });

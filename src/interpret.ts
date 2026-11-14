@@ -26,6 +26,8 @@ export async function receive(
    * before a slow search). Without it they go first in the returned list.
    */
   sendNow?: (out: Outbound[]) => Promise<void>,
+  /** Photos or videos that came with the text (links), for a picture message. */
+  media: string[] = [],
 ): Promise<{ out: Outbound[]; understoodAs?: string }> {
   const keyword = handleKeyword(state, from, body, now, carrierReplies);
   if (keyword) {
@@ -43,7 +45,7 @@ export async function receive(
     if (sendNow) await sendNow(ready);
     else early.push(...ready);
   };
-  const result = await respond(state, from, body, now, ai, now_);
+  const result = await respond(state, from, body, now, ai, now_, media);
   return { ...result, out: [...early, ...prepareOutbound(state, result.out, now)] };
 }
 
@@ -54,6 +56,7 @@ async function respond(
   now: Date,
   ai: Ai,
   sendNow: (out: Outbound[]) => Promise<void>,
+  media: string[],
 ): Promise<{ out: Outbound[]; understoodAs?: string }> {
   let text = body.trim();
   const isLandlord = state.landlords.some((l) => digits(l.phone) === digits(from));
@@ -93,7 +96,7 @@ async function respond(
   const search = booking ? null : searchFromYes(state, from, text);
   if (search) text = search;
 
-  const help = search || booking ? null : needsHelp(state, from, text, now);
+  const help = search || booking || !text ? null : needsHelp(state, from, text, now);
   if (help && ai.understand) {
     try {
       const command = await ai.understand({ ...help, text, now, valid: (c) => usableReply(help.role, c, now), same: (a, b) => sameReply(help.role, a, b, now) });
@@ -124,11 +127,11 @@ async function respond(
   // A new repair: the AI judges whether it's urgent ("it's freezing in
   // here" is; "the heater makes a small noise" isn't), and picks the trade
   // when the words don't say ("half the apartment went dark").
-  let hints: TextHints = {};
-  if (ai.triage && isNewRepair(state, from, text)) {
+  let hints: TextHints = { media };
+  if (ai.triage && text && isNewRepair(state, from, text)) {
     try {
       const t = await ai.triage(text);
-      if (t) hints = { trade: tradeForProblem(text) ? null : t.trade, urgent: t.urgent };
+      if (t) hints = { media, trade: tradeForProblem(text) ? null : t.trade, urgent: t.urgent };
     } catch (error) {
       console.error("triage failed:", error);
     }

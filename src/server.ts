@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { makeAi } from "./ai.js";
 import { tick } from "./engine.js";
 import { prepareOutbound } from "./compliance.js";
+import { SAMPLE_PHOTO } from "./sample-photo.js";
 import { receive } from "./interpret.js";
 import type { Outbound, State } from "./types.js";
 
@@ -39,7 +40,8 @@ const SEED_FILE =
 const PAGE = new URL("../public/index.html", import.meta.url);
 const PHONE_PAGE = new URL("../public/phone.html", import.meta.url);
 
-type LogEntry = { at: string; from: string; to: string; body: string };
+type LogEntry = { at: string; from: string; to: string; body: string; media?: string[] };
+
 type Saved = { state: State; log: LogEntry[]; clockOffsetMs: number };
 
 function seed(): Saved {
@@ -54,7 +56,7 @@ const now = () => new Date(Date.now() + saved.clockOffsetMs);
 const BOT = "repair line";
 
 function record(out: Outbound[]) {
-  for (const o of out) saved.log.push({ at: now().toISOString(), from: BOT, to: o.to, body: o.body });
+  for (const o of out) saved.log.push({ at: now().toISOString(), from: BOT, to: o.to, body: o.body, ...(o.media?.length ? { media: o.media } : {}) });
 }
 
 async function body(req: import("node:http").IncomingMessage): Promise<Record<string, unknown>> {
@@ -93,20 +95,28 @@ createServer(async (req, res) => {
     res.end(readFileSync(PAGE));
     return;
   }
+  // A stand-in for a tenant's photo, so the photo steps can be tried with no phone.
+  if (req.method === "GET" && path === "/sample-photo.svg") {
+    res.writeHead(200, { "content-type": "image/svg+xml" });
+    res.end(SAMPLE_PHOTO);
+    return;
+  }
   if (req.method === "GET" && path === "/api/state") {
     return json({ ...saved, now: now().toISOString(), ai: ai.live });
   }
   if (req.method === "POST" && path === "/api/text") {
-    const { from, text } = await body(req);
-    if (typeof from !== "string" || typeof text !== "string" || !text.trim()) {
+    const { from, text, media: rawMedia } = await body(req);
+    // Only the sample photo: the simulator never fetches a link someone typed in.
+    const media = Array.isArray(rawMedia) ? rawMedia.filter((m) => m === "/sample-photo.svg").slice(0, 3) : [];
+    if (typeof from !== "string" || typeof text !== "string" || (!text.trim() && !media.length)) {
       return json({ error: "from and text are required" }, 400);
     }
-    saved.log.push({ at: now().toISOString(), from, to: BOT, body: text });
+    saved.log.push({ at: now().toISOString(), from, to: BOT, body: text, ...(media.length ? { media } : {}) });
     // "Looking for plumbers now" shows on the phones before the search ends.
     const { out, understoodAs } = await receive(saved.state, from, text, now(), ai, false, async (early) => {
       record(early);
       save();
-    });
+    }, media);
     // In the terminal only: the bot's reply already shows what it understood.
     if (understoodAs) console.log(`AI read "${text}" as: ${understoodAs}`);
     record(out);

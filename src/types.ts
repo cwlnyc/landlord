@@ -72,6 +72,17 @@ export type Repair = {
   trade?: string;
   /** Repair people who already said no, so they aren't suggested again. */
   tried?: string[];
+  /** Photos and videos the tenant sent about it (links), passed on to the repair person. */
+  photos?: string[];
+  /**
+   * The repair person asked something ("what's the issue? can I see a pic?").
+   * Until they text again, the tenant's texts go to them, photos included.
+   */
+  question?: string;
+  /** Set once the tenant's first answer to `question` went over. */
+  answered?: boolean;
+  /** Times the repair person offered (ISO), when there was more than one; the tenant picks. */
+  offers?: string[];
 };
 
 export type State = {
@@ -112,4 +123,9 @@ export type State = {
 };
 
 /** A text to send. The simulator shows it; later Twilio sends it. */
-export type Outbound = { to: string; body: string };
+export type Outbound = {
+  to: string;
+  body: string;
+  /** Links to photos or videos sent along (a picture message). */
+  media?: string[];
+};

@@ -30,6 +30,7 @@
   form { display:flex; gap:8px; padding:10px 12px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); }
   input { flex:1; min-width:0; font:inherit; font-size:17px; padding:10px 14px; border-radius:20px; border:1px solid var(--line); background:var(--card); color:var(--fg); }
   form button { font:inherit; font-weight:600; border:0; border-radius:20px; padding:0 16px; background:var(--accent); color:#fff; }
+  .msg img { display:block; max-width:100%; border-radius:12px; margin-top:4px; }
   .hint { margin:auto; color:var(--muted); text-align:center; font-size:15px; }
   details { padding:0 12px 8px; color:var(--muted); font-size:14px; }
   details p { margin:6px 0; }
@@ -40,7 +41,7 @@
 <div class="app">
   <header>
     <b>Landlord Line: demo</b>
-    <small>You're Pat, the landlord. Tap a tenant below to have them text in; they and the plumber are played for you. Reply like you'd text anyone.</small>
+    <small>You're Pat, the landlord. Tap a tenant below to have them text in. They and the repair people are played for you, photos included. Reply like you'd text anyone.</small>
     <div class="tools">
       <button id="water" type="button">Maria: water's out</button>
       <button id="door" type="button">Kevin: door won't close</button>

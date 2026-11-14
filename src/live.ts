@@ -91,8 +91,8 @@ async function deliver(out: Outbound[]) {
       continue;
     }
     try {
-      await sendSms(cfg, o.to, o.body);
-      console.log(`-> ${o.to}: ${o.body.split("\n")[0]}`);
+      await sendSms(cfg, o.to, o.body, o.media);
+      console.log(`-> ${o.to}: ${o.body.split("\n")[0]}${o.media?.length ? ` [+${o.media.length} photo]` : ""}`);
     } catch (error) {
       console.error(String(error));
     }
@@ -130,13 +130,13 @@ const server = createServer(async (req, res) => {
   res.writeHead(200, { "content-type": "text/xml" }).end(EMPTY_TWIML);
 
   await serial(async () => {
-    const { from, text } = await readInbound(cfg, params);
-    console.log(`<- ${from}: ${text.split("\n")[0]}`);
+    const { from, text, media } = await readInbound(cfg, params);
+    console.log(`<- ${from}: ${text.split("\n")[0]}${media.length ? ` [+${media.length} photo]` : ""}`);
     // "Looking for plumbers now" goes out as a real text before the search ends.
     const { out, understoodAs } = await receive(state, from, text, new Date(), ai, true, async (early) => {
       save();
       await deliver(early);
-    });
+    }, media);
     if (understoodAs) console.log(`   AI read it as: ${understoodAs}`);
     save();
     await deliver(out);

@@ -38,6 +38,7 @@
   form input { flex:1; font:inherit; padding:8px 12px; border-radius:18px; border:1px solid var(--line);
                background:var(--bg); color:var(--fg); min-width:0; }
   .hint { color:var(--muted); font-size:13px; padding:0 14px 8px; }
+  .msg img { display:block; max-width:100%; border-radius:10px; margin-top:4px; }
 </style>
 </head>
 <body>
@@ -63,13 +64,13 @@
   </section>
   <section class="phone" data-role="tenant">
     <h2>Tenant</h2><select></select>
-    <div class="hint">Try: heat not working, or: sent the rent on zelle</div>
+    <div class="hint">Try: sink is leaking. When the repair person asks for a picture: <button type="button" id="photo">📷 Send a photo</button></div>
     <div class="thread"></div>
     <form><input placeholder="Text the repair line" autocomplete="off"><button class="primary">Send</button></form>
   </section>
   <section class="phone" data-role="vendor">
     <h2>Repair person</h2><select></select>
-    <div class="hint">Try: tomorrow 8am, or NO</div>
+    <div class="hint">Try: can I see a pic? · tue 9am or wed 2pm · NO</div>
     <div class="thread"></div>
     <form><input placeholder="Text the repair line" autocomplete="off"><button class="primary">Send</button></form>
   </section>
@@ -118,6 +119,7 @@ function render() {
         const card = m.body.startsWith("BEGIN:VCARD") && m.body.match(/^FN:(.*)$/m);
         const tel = m.body.match(/^TEL[^:]*:(.*)$/m);
         el.textContent = card ? `Contact card: ${card[1]}, ${tel ? tel[1] : ""}` : m.body;
+        for (const src of m.media ?? []) el.append(Object.assign(document.createElement("img"), { src, alt: "Photo" }));
         const t = document.createElement("time");
         t.textContent = fmt(m.at);
         el.append(t);
@@ -148,6 +150,14 @@ for (const phone of document.querySelectorAll(".phone")) {
 for (const b of document.querySelectorAll("[data-hours]")) {
   b.addEventListener("click", () => post("/api/clock", { hours: Number(b.dataset.hours) }));
 }
+// A tenant's picture message (a drawn sample photo of a leak).
+document.getElementById("photo").addEventListener("click", () => {
+  const phone = document.querySelector('.phone[data-role=tenant]');
+  const input = phone.querySelector("input");
+  const text = input.value.trim();
+  input.value = "";
+  post("/api/text", { from: phone.querySelector("select").value, text, media: ["/sample-photo.svg"] });
+});
 // Like tapping Share Contact on an iPhone: sends a vCard to the repair line.
 document.getElementById("share").addEventListener("click", () => {
   const name = prompt('Contact name, saved like Mom does (e.g. "Mike plumber Hamden"):');

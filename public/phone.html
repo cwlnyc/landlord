@@ -29,6 +29,7 @@
   .in { align-self:flex-start; background:var(--them); }
   .out { align-self:flex-end; background:var(--me); color:#fff; }
   .msg time { display:block; font-size:11px; opacity:.6; margin-top:2px; }
+  .msg img { display:block; max-width:100%; border-radius:12px; margin-top:4px; }
   .empty { color:var(--muted); text-align:center; margin-top:40px; padding:0 24px; }
   form { display:flex; gap:8px; padding:10px 12px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--bg); }
   input { flex:1; min-width:0; font:inherit; font-size:17px; padding:10px 14px; border-radius:20px; border:1px solid var(--line); background:var(--card); color:var(--fg); }
@@ -90,7 +91,7 @@ async function chatScreen() {
   app.className = "chat";
   app.innerHTML = `<header style="position:relative"><a href="${link("").replace(/n=&?/, "")}">‹ Back</a><b>Repair line</b><small></small></header>
     <div class="thread"></div>
-    <form><input placeholder="Text message" autocomplete="off" enterkeyhint="send"><button>Send</button></form>`;
+    <form>${person.role.startsWith("Tenant") ? '<button type="button" class="photo" aria-label="Send a sample photo">📷</button>' : ""}<input placeholder="Text message" autocomplete="off" enterkeyhint="send"><button>Send</button></form>`;
   app.querySelector("small").textContent = "You are " + person.name;
   const form = app.querySelector("form");
   const input = form.querySelector("input");
@@ -100,6 +101,13 @@ async function chatScreen() {
     if (!text) return;
     input.value = "";
     await api("/api/text", { from: person.phone, text });
+    draw(await api("/api/state"));
+  });
+  // A tenant's picture message, played with a drawn sample photo (no real camera here).
+  form.querySelector(".photo")?.addEventListener("click", async () => {
+    const text = input.value.trim();
+    input.value = "";
+    await api("/api/text", { from: person.phone, text, media: ["/sample-photo.svg"] });
     draw(await api("/api/state"));
   });
   draw(data);
@@ -118,6 +126,7 @@ function draw(data) {
           const el = document.createElement("div");
           el.className = "msg " + (digits(m.from) === me ? "out" : "in");
           el.textContent = m.body;
+          for (const src of m.media ?? []) el.append(Object.assign(document.createElement("img"), { src: src + (src.startsWith("/") && key ? "?key=" + encodeURIComponent(key) : ""), alt: "Photo" }));
           const t = document.createElement("time");
           t.textContent = fmt(m.at);
           el.append(t);

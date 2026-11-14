@@ -53,22 +53,24 @@ export function isFromTwilio(
 export async function readInbound(
   cfg: TwilioConfig,
   params: Record<string, string>,
-): Promise<{ from: string; text: string }> {
+): Promise<{ from: string; text: string; media: string[] }> {
   const from = params.From ?? "";
   let text = params.Body ?? "";
-  const media = Number(params.NumMedia ?? 0);
-  for (let i = 0; i < media; i++) {
+  const count = Number(params.NumMedia ?? 0);
+  const media: string[] = [];
+  for (let i = 0; i < count; i++) {
     const type = params[`MediaContentType${i}`] ?? "";
     const url = params[`MediaUrl${i}`];
-    if (url && /vcard|x-vcard|text\/directory/i.test(type)) {
+    if (!url) continue;
+    if (/vcard|x-vcard|text\/directory/i.test(type)) {
       const res = await fetch(url, { headers: { authorization: basic(cfg) } });
-      if (res.ok) {
-        text = await res.text();
-        break;
-      }
+      if (res.ok) text = await res.text();
+    } else if (/^(image|video)\//i.test(type)) {
+      // A tenant's photo of the problem: passed on to the repair person as is.
+      media.push(url);
     }
   }
-  return { from, text };
+  return { from, text, media };
 }
 
 function basic(cfg: TwilioConfig): string {
@@ -76,14 +78,17 @@ function basic(cfg: TwilioConfig): string {
 }
 
 /** Sends one text. Throws with Twilio's message if it's refused. */
-export async function sendSms(cfg: TwilioConfig, to: string, body: string): Promise<void> {
+export async function sendSms(cfg: TwilioConfig, to: string, body: string, media: string[] = []): Promise<void> {
+  const form = new URLSearchParams({ From: cfg.from, To: toE164(to), Body: body });
+  // A picture message: Twilio fetches each link and attaches it (MMS costs more than a plain text).
+  for (const url of media) form.append("MediaUrl", url);
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${cfg.accountSid}/Messages.json`, {
     method: "POST",
     headers: {
       authorization: basic(cfg),
       "content-type": "application/x-www-form-urlencoded",
     },
-    body: new URLSearchParams({ From: cfg.from, To: toE164(to), Body: body }),
+    body: form,
   });
   if (!res.ok) {
     const detail = await res.text();
