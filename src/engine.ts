@@ -1,4 +1,5 @@
 import { pickVendor, readContactCard, readContactName, tradeForProblem, tradeLabel } from "./match.js";
+import { tickUpkeep, upkeepCommand } from "./upkeep.js";
 import { formatOffers, formatSlot, mentionsTime, offersTime, parseOffers, parseVisitTime, pickOffer } from "./parse-time.js";
 import { isQuietHour } from "./compliance.js";
 import { isRentText, landlordPaid, rentStatus, setRent, tenantRentText, tickRent } from "./rent.js";
@@ -30,7 +31,7 @@ const HOUR = 60 * 60 * 1000;
 // "sure", "go ahead", "sounds good", "nah", "not him".
 const YES_WORDS = ["YES", "Y", "YEP", "YUP", "YEAH", "YEA", "YA", "OK", "OKAY", "SURE", "K", "GO", "PLEASE", "PLS", "SOUNDS", "ABSOLUTELY", "DEFINITELY"];
 const NO_WORDS = ["NO", "N", "NOPE", "NAH", "DONT", "NOT"];
-export const LANDLORD_COMMANDS = ["SEND", "LIST", "STATUS", "DONE", "CANCEL", "DROP", "FIND", "BOOKED", "HELP", "PAID", "RENT", ...YES_WORDS, ...NO_WORDS];
+export const LANDLORD_COMMANDS = ["SEND", "LIST", "STATUS", "DONE", "CANCEL", "DROP", "FIND", "BOOKED", "HELP", "PAID", "RENT", "UPKEEP", ...YES_WORDS, ...NO_WORDS];
 
 export function digits(phone: string): string {
   return phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
@@ -106,6 +107,7 @@ const HELP = [
   "PAID MARIA = Maria's rent came in (PAID MARIA 600 CASH for part of it)",
   "RENT = who's paid this month (RENT MARIA 1200 DUE 1 sets Maria's rent)",
   "MARIA SPEAKS SPANISH = I'll text Maria in Spanish and translate for you",
+  "UPKEEP = reminders for furnace service, smoke detectors, gutters and more",
   "Forward a bank's payment alert here and I'll mark that rent paid.",
   "To add a repair person, share their contact card with this number.",
 ].join("\n");
@@ -326,6 +328,26 @@ function relayToVendor(state: State, repair: Repair, unit: Unit, text: string, m
     { to: unit.tenant.phone, body: `Thanks, I sent that to ${vendor.name}.` },
     { to: vendor.phone, body: `${said}${first ? `\n\nWhen could you go to ${unit.address}?` : ""}`, ...(media.length ? { media } : {}) },
   ];
+}
+
+/**
+ * A routine upkeep job (upkeep.ts) started like a tenant's repair, so YES
+ * books it the usual way. It's never urgent: searches look for someone in
+ * the next couple of days, not 24/7.
+ */
+export function startUpkeep(state: State, unit: Unit, text: string, trade: string, why: (id: number) => string, now: Date): Outbound[] {
+  const repair: Repair = {
+    id: state.nextId++,
+    unitId: unit.id,
+    text,
+    status: "new",
+    createdAt: now.toISOString(),
+    trade,
+    urgent: false,
+    upkeep: true,
+  };
+  state.repairs.push(repair);
+  return toLandlords(state, `${why(repair.id)}\n\n${suggest(state, repair)}`);
 }
 
 /** "plumber" -> "plumbers", "HVAC" -> "HVAC companies". */
@@ -625,6 +647,7 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
     }
   }
 
+  if (command === "UPKEEP") return upkeepCommand(state, landlord, rest);
   if (command === "PAID") return landlordPaid(state, landlord, rest, now);
   if (command === "RENT") return rest.length ? setRent(state, landlord, rest) : reply(rentStatus(state, now));
 
@@ -955,5 +978,6 @@ export function tick(state: State, now: Date): Outbound[] {
     }
   }
   out.push(...tickRent(state, now));
+  out.push(...tickUpkeep(state, now));
   return out;
 }

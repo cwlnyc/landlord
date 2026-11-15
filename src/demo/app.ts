@@ -11,6 +11,7 @@ import { prepareOutbound } from "../compliance.js";
 import { receive } from "../interpret.js";
 import { currentPeriod, tickRent } from "../rent.js";
 import type { Found, Outbound, State } from "../types.js";
+import { upkeepDue } from "../upkeep.js";
 import seed from "../../data/demo.json" with { type: "json" };
 import { SAMPLE_PHOTO } from "../sample-photo.js";
 
@@ -19,9 +20,10 @@ const PHOTO = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(SAMPLE_PHOT
 const PAT = "+1 203 555 0101";
 const MARIA = "+1 203 555 0201";
 const KEVIN = "+1 860 555 0202";
+const SAM = "+1 203 555 0301";
 const JOHN = "+1 203 555 0302";
 const ROB = "+1 860 555 0303";
-const NAMES: Record<string, string> = { [PAT]: "Pat", [MARIA]: "Maria", [KEVIN]: "Kevin", [JOHN]: "John", [ROB]: "Rob" };
+const NAMES: Record<string, string> = { [PAT]: "Pat", [MARIA]: "Maria", [KEVIN]: "Kevin", [SAM]: "Sam", [JOHN]: "John", [ROB]: "Rob" };
 const digits = (p: string) => p.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
 const nameOf = (p: string) => NAMES[Object.keys(NAMES).find((k) => digits(k) === digits(p)) ?? ""] ?? "Someone";
 
@@ -84,7 +86,7 @@ async function actors(out: Outbound[]) {
         void text(o.to, "here, it's dripping under the sink", [PHOTO]);
       } else if (/Which works for you\?/.test(o.body)) {
         await wait(1800);
-        void text(o.to, "wed works");
+        void text(o.to, "the first one works");
       } else if (/isn't marked paid yet/.test(o.body)) {
         await wait(2200);
         void text(o.to, "oh sorry! sending the rent tonight");
@@ -96,6 +98,12 @@ async function actors(out: Outbound[]) {
       } else if (/When could you go to /.test(o.body)) {
         await wait(2400);
         void text(o.to, "ok I see it, just a loose fitting. I can do tue 9am or wed 2pm");
+      }
+    } else if (to === digits(SAM)) {
+      // An HVAC company booking a routine service: two openings next week.
+      if (/Job at .*When could you go\?/.test(o.body)) {
+        await wait(2000);
+        void text(o.to, "sure, I can do thu 10am or fri 1pm");
       }
     } else if (to === digits(ROB)) {
       if (/When could you go\?/.test(o.body)) {
@@ -193,6 +201,22 @@ $("#restart").addEventListener("click", () => void start());
 $("#water").addEventListener("click", () => void text(MARIA, "my water is not working"));
 $("#door").addEventListener("click", () => void text(KEVIN, "bedroom door won't close"));
 $("#rent").addEventListener("click", () => void rentDay());
+$("#upkeep").addEventListener("click", () => void furnaceDue());
+
+/**
+ * Routine upkeep, without waiting for September: the furnace service comes
+ * due at Maria's building, and the line offers to book Sam like any repair.
+ */
+function furnaceDue() {
+  busy = busy.then(async () => {
+    const maria = state.units.find((u) => digits(u.tenant.phone) === digits(MARIA))!;
+    state.upkeep = { on: ["furnace"], sent: {} };
+    const out = prepareOutbound(state, upkeepDue(state, "furnace", maria, new Date()), new Date());
+    record(out);
+    await actors(out);
+  });
+  return busy;
+}
 
 /**
  * Rent the way it really goes (Mom): tenants don't text "I paid", the money

@@ -77,6 +77,8 @@ export type Repair = {
   urgent?: boolean;
   /** The trade the job needs, from the words or the AI; else read from `text`. */
   trade?: string;
+  /** Started by routine upkeep rather than a tenant's report. */
+  upkeep?: boolean;
   /** Repair people who already said no, so they aren't suggested again. */
   tried?: string[];
   /** Photos and videos the tenant sent about it (links), passed on to the repair person. */
@@ -125,6 +127,11 @@ export type State = {
   welcomed?: string[];
   /** How and when each number agreed or opted out, kept as a record. */
   consent?: Record<string, { at: string; how: string }>;
+  /**
+   * Routine upkeep the landlord turned on (upkeep.ts keys), and the month each
+   * job was last started at each building ("furnace|12 Oak St, Naugatuck").
+   */
+  upkeep?: { on: string[]; sent: Record<string, string>; lastAt?: string };
   /** Defaults: remind 3 days before, late notice 5 days after, at 9am. */
   rentSettings?: { remindDaysBefore?: number; graceDays?: number; hour?: number };
 };
