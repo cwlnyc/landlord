@@ -125,6 +125,13 @@ export type State = {
   welcomed?: string[];
   /** How and when each number agreed or opted out, kept as a record. */
   consent?: Record<string, { at: string; how: string }>;
+  /** Places open for rental applications ("LISTING 12 Oak St Unit 1"). */
+  listings?: { id: number; place: string; open: boolean; openedAt: string }[];
+  /**
+   * People applying by text: the same questions for everyone, answers kept as
+   * written. listingId 0 means they haven't said which place yet.
+   */
+  applications?: { phone: string; listingId: number; answers: string[]; step: number; at: string; doneAt?: string }[];
   /** Defaults: remind 3 days before, late notice 5 days after, at 9am. */
   rentSettings?: { remindDaysBefore?: number; graceDays?: number; hour?: number };
 };
