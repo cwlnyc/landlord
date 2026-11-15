@@ -110,11 +110,15 @@ async function actors(out: Outbound[]) {
 
 /* -------------------------------- page -------------------------------- */
 
-function chipsFor(last: string | undefined): string[] {
+/** A bank's Zelle alert, as Pat would forward it from their banking app. */
+const ALERT = "BofA: KEVIN SMITH sent you $1,200.00 with Zelle(R).";
+
+/** Quick replies: what the chip says, and what it sends (the same unless shown shorter). */
+function chipsFor(last: string | undefined): (string | [label: string, text: string])[] {
   if (!last) return [];
   if (/tell me who you booked/i.test(last)) return ["1, tomorrow 8am", "2, tomorrow 9am"];
-  if (/Rent not marked paid/i.test(last)) return ["Kevin paid", "Kevin paid 600"];
-  if (/Let me know once it's in/i.test(last)) return ["Got it", "Not yet", "600 so far"];
+  if (/Rent not marked paid/i.test(last)) return [["📩 Forward Kevin's bank alert", ALERT], "Kevin paid"];
+  if (/Let me know once it's in/i.test(last)) return [["📩 Forward Kevin's bank alert", ALERT], "Not yet", "600 so far"];
   if (/\?$/.test(last.trim())) return ["Yes", "No"];
   return [];
 }
@@ -145,11 +149,12 @@ function render() {
 
   const last = [...mine].reverse().find((m) => m.from === "line")?.body;
   $("#chips").replaceChildren(
-    ...chipsFor(last).map((label) => {
+    ...chipsFor(last).map((chip) => {
+      const [label, said] = typeof chip === "string" ? [chip, chip] : chip;
       const b = document.createElement("button");
       b.type = "button";
       b.textContent = label;
-      b.onclick = () => void text(PAT, label);
+      b.onclick = () => void text(PAT, said);
       return b;
     }),
   );

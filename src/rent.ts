@@ -125,6 +125,52 @@ export function notYetReply(state: State, from: string, body: string): string | 
 }
 
 /**
+ * A bank's payment alert the landlord forwarded to the line, like
+ * "Chase: You received $1,200.00 from KEVIN SMITH via Zelle" or "KEVIN SMITH
+ * sent you $1,200.00 with Zelle". Who paid and how much, or null. No bank
+ * login: the landlord's bank already sends these, they just forward them.
+ */
+export function readBankAlert(text: string): { payer: string; amount: number } | null {
+  const amount = String.raw`\$\s?([\d,]+(?:\.\d{2})?)`;
+  const who = String.raw`([A-Za-z][A-Za-z.'\- ]{1,40}?)`;
+  const end = String.raw`(?=\s+(?:via|with|through|using|on|to|for|posted|was|has|is|into|in)\b|\s*[.,!;:()\n]|\s*$)`;
+  const patterns = [
+    new RegExp(String.raw`\b(?:received|got)\s+(?:a\s+(?:payment|deposit)\s+of\s+)?${amount}\s+from\s+${who}${end}`, "i"),
+    new RegExp(String.raw`\b(?:deposit|payment|transfer)\s+of\s+${amount}\s+from\s+${who}${end}`, "i"),
+  ];
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m) return { amount: Number(m[1]!.replace(/,/g, "")), payer: m[2]!.trim() };
+  }
+  const sent = text.match(new RegExp(String.raw`(?:^|[:.\n]\s*)${who}\s+(?:sent|paid)\s+you\s+${amount}`, "i"));
+  if (sent) return { amount: Number(sent[2]!.replace(/,/g, "")), payer: sent[1]!.trim() };
+  return null;
+}
+
+/**
+ * What a forwarded bank alert means: the PAID command for the tenant whose
+ * name it carries, or a reply asking whose it is. Null if it isn't an alert.
+ */
+export function bankAlert(state: State, body: string): { command: string } | { reply: string } | null {
+  const alert = readBankAlert(body);
+  if (!alert || !(alert.amount > 0)) return null;
+  const words = alert.payer.toLowerCase().split(/[\s.]+/).filter(Boolean);
+  const matches = rentUnits(state).filter((u) => {
+    const names = u.tenant.name.toLowerCase().split(/\s+/);
+    // "KEVIN SMITH" is Kevin; with a last name on file, both have to agree.
+    return names.length > 1 ? names.every((n) => words.includes(n)) : words.includes(names[0]!);
+  });
+  const amount = alert.amount.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (matches.length === 1) {
+    return { command: `PAID ${matches[0]!.tenant.name.split(/\s+/)[0]} ${alert.amount} bank alert` };
+  }
+  const names = rentUnits(state).map((u) => u.tenant.name.split(/\s+/)[0]);
+  return {
+    reply: `That's $${amount} from ${alert.payer}, but I can't tell whose rent it is. Reply like: ${names[0] ?? "Kevin"} paid ${alert.amount}`,
+  };
+}
+
+/**
  * Rent said the way people say it: "Kevin paid 600 cash" or "Maria's rent
  * is 1450, due the 1st". The command it means, or null.
  */
@@ -196,7 +242,8 @@ function rentLine(state: State, now: Date): string {
     const { period } = currentPeriod(u, now);
     return paidToward(state, u.id, period) >= u.rent!;
   });
-  return `${paid.length} of ${units.length} paid.`;
+  const waiting = units.filter((u) => !paid.includes(u)).map((u) => u.tenant.name.split(/\s+/)[0]!);
+  return `${paid.length} of ${units.length} paid.${waiting.length ? ` Still waiting on ${waiting.join(", ")}.` : ""}`;
 }
 
 /**

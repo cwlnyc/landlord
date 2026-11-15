@@ -2,7 +2,7 @@ import type { Ai } from "./ai.js";
 import { handleKeyword, prepareOutbound } from "./compliance.js";
 import { LANDLORD_COMMANDS, type TextHints, bookingFromReply, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, sameReply, usableReply, placeOf } from "./engine.js";
 import { tradeForProblem } from "./match.js";
-import { notYetReply, paidFromReply, rentFromWords } from "./rent.js";
+import { bankAlert, notYetReply, paidFromReply, rentFromWords } from "./rent.js";
 import type { Outbound, State } from "./types.js";
 
 /**
@@ -82,7 +82,10 @@ async function respond(
       state.pendingPaid = others;
     }
     if (notYet) return { out: [{ to: from, body: notYet }] };
-    const plain = paid ?? rentFromWords(state, text);
+    // A forwarded bank alert ("KEVIN SMITH sent you $1,200.00 with Zelle").
+    const alert = paid ? null : bankAlert(state, text);
+    if (alert && "reply" in alert) return { out: [{ to: from, body: alert.reply }] };
+    const plain = paid ?? (alert ? alert.command : rentFromWords(state, text));
     if (plain) text = plain;
   }
 
