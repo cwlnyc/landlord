@@ -105,6 +105,8 @@ const HELP = [
   "DROP 3 = drop #3 (never text just CANCEL or STOP: that turns this line off for you)",
   "PAID MARIA = Maria's rent came in (PAID MARIA 600 CASH for part of it)",
   "RENT = who's paid this month (RENT MARIA 1200 DUE 1 sets Maria's rent)",
+  "MARIA SPEAKS SPANISH = I'll text Maria in Spanish and translate for you",
+  "Forward a bank's payment alert here and I'll mark that rent paid.",
   "To add a repair person, share their contact card with this number.",
 ].join("\n");
 

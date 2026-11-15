@@ -5,6 +5,7 @@ import { digits, tick } from "./engine.js";
 import { prepareOutbound } from "./compliance.js";
 import { receive } from "./interpret.js";
 import { findCloudflared, startTunnel } from "./tunnel.js";
+import { translateOut } from "./translate.js";
 import { EMPTY_TWIML, isFromTwilio, readInbound, sendSms, setWebhook, toE164, type TwilioConfig } from "./twilio.js";
 import type { Outbound, State } from "./types.js";
 
@@ -179,7 +180,7 @@ server.listen(PORT, () => {
 
 setInterval(() => {
   void serial(async () => {
-    const out = prepareOutbound(state, tick(state, new Date()), new Date());
+    const out = await translateOut(state, prepareOutbound(state, tick(state, new Date()), new Date()), ai.translate);
     if (out.length) {
       save();
       await deliver(out);

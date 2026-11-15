@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { FindPlan, HelpRequest } from "./engine.js";
 import { TRADE_LABELS } from "./match.js";
 import { ModelRouter, costOf } from "./router.js";
+import type { Translator } from "./translate.js";
 import type { Found } from "./types.js";
 
 /**
@@ -38,7 +39,14 @@ export type Finder = (plan: FindPlan) => Promise<Found[]>;
 /** What a new repair needs: which trade, and whether someone's needed today. */
 export type Triage = { trade: string | null; urgent: boolean | null };
 export type TriageReader = (problem: string) => Promise<Triage | null>;
-export type Ai = { understand: Understand | null; find: Finder; live: boolean; triage?: TriageReader | null };
+export type Ai = {
+  understand: Understand | null;
+  find: Finder;
+  live: boolean;
+  triage?: TriageReader | null;
+  /** Between English and each person's language; missing means no translating. */
+  translate?: Translator | null;
+};
 
 // Each job tries the cheap model first and keeps its answer only when it's
 // sure and the answer checks out; otherwise the strong model answers (see
@@ -62,6 +70,7 @@ export function makeAi(apiKey = process.env.ANTHROPIC_API_KEY, log: (line: strin
     understand: claudeUnderstand(client, router),
     find: claudeFind(client, router, log),
     triage: claudeTriage(client, router),
+    translate: claudeTranslate(client, log),
     live: true,
   };
 }
@@ -179,6 +188,61 @@ function claudeTriage(client: Anthropic, router: ModelRouter): TriageReader {
       // A spot check agrees when both say the same trade and the same urgency.
       (a, b) => !!a && !!b && a.trade === b.trade && a.urgent === b.urgent,
     );
+  };
+}
+
+/* ----------------------------- translate ----------------------------- */
+
+const TO_ENGLISH = [
+  "You translate text messages sent to a landlord's repair and rent text line, into English.",
+  "Say which language the message is written in (its English name, like Spanish or Chinese), and give it in plain, casual English.",
+  "If it is already English, say English and return it unchanged.",
+  'Keep names, addresses, phone numbers, amounts, dates and times exact, written the English way ("mañana a las 9" -> "tomorrow at 9am").',
+  "Translate only. Never answer or add anything.",
+].join(" ");
+
+const fromEnglishRules = (language: string) =>
+  [
+    `Translate this text message from a landlord's repair and rent text line into ${language}.`,
+    "Keep it as short and casual as the original.",
+    "Keep exactly as written: names, street addresses, phone numbers, dollar amounts, dates, times, links, and repair numbers like (#1).",
+    "Keep these command words in English capitals wherever they appear: STOP, START, HELP, YES, NO, SEND, FIND, BOOKED, PAID, RENT, DONE, LIST, CANCEL, DROP.",
+    "Reply with only the translation.",
+  ].join(" ");
+
+/**
+ * The cheap model translates: a translation is easy for it, and checking it
+ * with the strong one would double the cost of every text.
+ */
+function claudeTranslate(client: Anthropic, log: (line: string) => void): Translator {
+  const Read = z.object({ language: z.string(), english: z.string() });
+  return {
+    async toEnglish(text) {
+      const response = await client.beta.messages.parse({
+        model: CHEAP,
+        max_tokens: 1024,
+        ...FALLBACK,
+        output_config: { effort: "low", format: betaZodOutputFormat(Read) },
+        system: TO_ENGLISH,
+        messages: [{ role: "user", content: `<message>${text}</message>` }],
+      });
+      log(`AI translate in: $${costOf(CHEAP, response.usage).toFixed(5)}`);
+      return response.stop_reason === "refusal" ? null : response.parsed_output;
+    },
+    async fromEnglish(text, language) {
+      const response = await client.beta.messages.create({
+        model: CHEAP,
+        max_tokens: 1024,
+        ...FALLBACK,
+        output_config: { effort: "low" },
+        system: fromEnglishRules(language),
+        messages: [{ role: "user", content: text }],
+      });
+      log(`AI translate out (${language}): $${costOf(CHEAP, response.usage).toFixed(5)}`);
+      if (response.stop_reason === "refusal") return null;
+      const out = response.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
+      return out || null;
+    },
   };
 }
 

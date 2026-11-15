@@ -5,6 +5,7 @@ import { tick } from "./engine.js";
 import { prepareOutbound } from "./compliance.js";
 import { SAMPLE_PHOTO } from "./sample-photo.js";
 import { receive } from "./interpret.js";
+import { translateOut } from "./translate.js";
 import type { Outbound, State } from "./types.js";
 
 /**
@@ -120,7 +121,7 @@ createServer(async (req, res) => {
     // In the terminal only: the bot's reply already shows what it understood.
     if (understoodAs) console.log(`AI read "${text}" as: ${understoodAs}`);
     record(out);
-    record(prepareOutbound(saved.state, tick(saved.state, now()), now()));
+    record(await translateOut(saved.state, prepareOutbound(saved.state, tick(saved.state, now()), now()), ai.translate));
     save();
     return json({ ok: true });
   }
@@ -131,7 +132,7 @@ createServer(async (req, res) => {
     const steps = Math.max(0, Math.min(24 * 60, Math.round(Number(hours ?? 0))));
     for (let i = 0; i < steps; i++) {
       saved.clockOffsetMs += 60 * 60 * 1000;
-      record(prepareOutbound(saved.state, tick(saved.state, now()), now()));
+      record(await translateOut(saved.state, prepareOutbound(saved.state, tick(saved.state, now()), now()), ai.translate));
     }
     save();
     return json({ ok: true });

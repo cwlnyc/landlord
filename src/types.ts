@@ -1,5 +1,10 @@
 /** Someone with a phone: a landlord or a tenant. */
-export type Person = { name: string; phone: string };
+export type Person = {
+  name: string;
+  phone: string;
+  /** The language they text in ("Spanish"); missing means English. */
+  lang?: string;
+};
 
 /** A rental unit and who lives there. */
 export type Unit = {
@@ -36,6 +41,8 @@ export type Vendor = {
   trade: string;
   town: string;
   phone: string;
+  /** The language they text in ("Spanish"); missing means English. */
+  lang?: string;
   /**
    * False for a business found by search and booked by phone: it never
    * signed up for texts and may be a landline, so the bot never texts it.

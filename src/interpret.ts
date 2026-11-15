@@ -3,6 +3,7 @@ import { handleKeyword, prepareOutbound } from "./compliance.js";
 import { LANDLORD_COMMANDS, type TextHints, bookingFromReply, handleText, isNewRepair, needsHelp, planFind, searchFromYes, showFound, digits, sameReply, usableReply, placeOf } from "./engine.js";
 import { tradeForProblem } from "./match.js";
 import { bankAlert, notYetReply, paidFromReply, rentFromWords } from "./rent.js";
+import { languageFromWords, translateIn, translateOut } from "./translate.js";
 import type { Outbound, State } from "./types.js";
 
 /**
@@ -39,14 +40,20 @@ export async function receive(
     const others = keyword.filter((o) => digits(o.to) !== d);
     return { out: [...toSender, ...prepareOutbound(state, others, now)] };
   }
+  // In English for the engine; each reply goes back out in its reader's language.
+  const heard = await translateIn(state, from, body, ai.translate);
+  const quoted = heard.original
+    ? { english: heard.english.trim(), original: heard.original.trim(), language: heard.language!, who: nameOf(state, from) }
+    : undefined;
   const early: Outbound[] = [];
   const now_ = async (out: Outbound[]) => {
-    const ready = prepareOutbound(state, out, now);
+    const ready = await translateOut(state, prepareOutbound(state, out, now), ai.translate, quoted);
     if (sendNow) await sendNow(ready);
     else early.push(...ready);
   };
-  const result = await respond(state, from, body, now, ai, now_, media);
-  return { ...result, out: [...early, ...prepareOutbound(state, result.out, now)] };
+  const result = await respond(state, from, heard.english, now, ai, now_, media);
+  const out = await translateOut(state, prepareOutbound(state, [...heard.notices, ...result.out], now), ai.translate, quoted);
+  return { ...result, out: [...early, ...out] };
 }
 
 async function respond(
@@ -71,6 +78,10 @@ async function respond(
     if (isLandlord && !LANDLORD_COMMANDS.includes(word)) text = `FIND ${text} #${pending}`;
   }
   let understoodAs: string | undefined;
+
+  // "Maria speaks Spanish": from now on the line translates for her.
+  const language = languageFromWords(state, from, text);
+  if (language) return { out: [{ to: from, body: language }] };
 
   // Rent said plainly: "got it" after "let me know once it's in", or
   // "Kevin paid 600 cash" / "Maria's rent is 1450" any time.
@@ -142,4 +153,13 @@ async function respond(
     }
   }
   return { out: handleText(state, from, text, now, hints), understoodAs };
+}
+
+function nameOf(state: State, phone: string): string {
+  const d = digits(phone);
+  const person =
+    state.landlords.find((l) => digits(l.phone) === d) ??
+    state.units.find((u) => digits(u.tenant.phone) === d)?.tenant ??
+    state.vendors.find((v) => digits(v.phone) === d);
+  return person?.name.split(/\s+/)[0] ?? "They";
 }
