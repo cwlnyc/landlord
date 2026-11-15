@@ -1,5 +1,4 @@
 import { pickVendor, readContactCard, readContactName, tradeForProblem, tradeLabel } from "./match.js";
-import { fromStranger, listingCommand } from "./applications.js";
 import { formatOffers, formatSlot, mentionsTime, offersTime, parseOffers, parseVisitTime, pickOffer } from "./parse-time.js";
 import { isQuietHour } from "./compliance.js";
 import { isRentText, landlordPaid, rentStatus, setRent, tenantRentText, tickRent } from "./rent.js";
@@ -31,7 +30,7 @@ const HOUR = 60 * 60 * 1000;
 // "sure", "go ahead", "sounds good", "nah", "not him".
 const YES_WORDS = ["YES", "Y", "YEP", "YUP", "YEAH", "YEA", "YA", "OK", "OKAY", "SURE", "K", "GO", "PLEASE", "PLS", "SOUNDS", "ABSOLUTELY", "DEFINITELY"];
 const NO_WORDS = ["NO", "N", "NOPE", "NAH", "DONT", "NOT"];
-export const LANDLORD_COMMANDS = ["SEND", "LIST", "STATUS", "DONE", "CANCEL", "DROP", "FIND", "BOOKED", "HELP", "PAID", "RENT", "LISTING", "APPLICANTS", ...YES_WORDS, ...NO_WORDS];
+export const LANDLORD_COMMANDS = ["SEND", "LIST", "STATUS", "DONE", "CANCEL", "DROP", "FIND", "BOOKED", "HELP", "PAID", "RENT", ...YES_WORDS, ...NO_WORDS];
 
 export function digits(phone: string): string {
   return phone.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
@@ -107,7 +106,6 @@ const HELP = [
   "PAID MARIA = Maria's rent came in (PAID MARIA 600 CASH for part of it)",
   "RENT = who's paid this month (RENT MARIA 1200 DUE 1 sets Maria's rent)",
   "MARIA SPEAKS SPANISH = I'll text Maria in Spanish and translate for you",
-  "LISTING 12 OAK ST UNIT 1 = take rental applications by text (APPLICANTS to see them)",
   "Forward a bank's payment alert here and I'll mark that rent paid.",
   "To add a repair person, share their contact card with this number.",
 ].join("\n");
@@ -130,9 +128,6 @@ export function handleText(state: State, from: string, body: string, now: Date, 
   if (vendor) return fromVendor(state, vendor, text, now, hints.media ?? []);
   const unit = unitFrom(state, from);
   if (unit) return fromTenant(state, unit, text, now, hints);
-  // Someone answering a rental listing ("Text APPLY to ...").
-  const applying = fromStranger(state, from, text, now);
-  if (applying) return applying;
   return [{ to: from, body: "Sorry, this number isn't set up. Please text your landlord directly." }];
 }
 
@@ -156,7 +151,7 @@ function needsHelpWithout(state: State, from: string, body: string, now: Date): 
   const text = body.trim();
   if (landlordOf(state, from)) {
     const word = (text.split(/\s+/)[0] ?? "").toUpperCase().replace(/[^A-Z]/g, "");
-    if (LANDLORD_COMMANDS.includes(word) || /^close\s+listing\b/i.test(text) || readContactCard(text) || state.pendingContact || state.pendingFind?.[digits(from)]) return null;
+    if (LANDLORD_COMMANDS.includes(word) || readContactCard(text) || state.pendingContact || state.pendingFind?.[digits(from)]) return null;
     const open = state.repairs.filter((r) => OPEN.includes(r.status));
     const found = state.lastFound !== undefined ? state.found?.[state.lastFound] : undefined;
     return {
@@ -595,9 +590,6 @@ function fromLandlord(state: State, landlord: Person, text: string, now: Date): 
   const reply = (body: string): Outbound[] => [{ to: landlord.phone, body }];
   const [word = "", ...rest] = text.split(/\s+/);
   const command = word.toUpperCase().replace(/[^A-Z]/g, "");
-
-  const listing = listingCommand(state, landlord, text, now);
-  if (listing) return listing;
 
   const card = readContactCard(text);
   if (card) return saveContact(state, landlord, card.name, card.phone);

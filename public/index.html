@@ -81,8 +81,7 @@ let data = null;
 
 function people(role) {
   if (role === "landlord") return data.state.landlords.map((l) => ({ label: l.name, phone: l.phone }));
-  // A stranger answering a rental listing (after the landlord texts LISTING ...).
-  if (role === "tenant") return [...data.state.units.map((u) => ({ label: `${u.tenant.name} (${u.address})`, phone: u.tenant.phone })), { label: "New applicant (not a tenant)", phone: "+1 914 555 0111" }];
+  if (role === "tenant") return data.state.units.map((u) => ({ label: `${u.tenant.name} (${u.address})`, phone: u.tenant.phone }));
   return data.state.vendors.map((v) => ({ label: `${v.name} (${v.code}, ${v.trade})`, phone: v.phone }));
 }
 

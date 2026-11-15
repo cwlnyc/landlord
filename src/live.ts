@@ -6,7 +6,6 @@ import { prepareOutbound } from "./compliance.js";
 import { receive } from "./interpret.js";
 import { findCloudflared, startTunnel } from "./tunnel.js";
 import { translateOut } from "./translate.js";
-import { isApplicant } from "./applications.js";
 import { EMPTY_TWIML, isFromTwilio, readInbound, sendSms, setWebhook, toE164, type TwilioConfig } from "./twilio.js";
 import type { Outbound, State } from "./types.js";
 
@@ -78,9 +77,7 @@ function known(phone: string): boolean {
   return (
     state.landlords.some((l) => digits(l.phone) === d) ||
     state.units.some((u) => digits(u.tenant.phone) === d) ||
-    state.vendors.some((v) => v.textable !== false && digits(v.phone) === d) ||
-    // Someone who texted in about a listing: every text to them is a reply.
-    isApplicant(state, phone)
+    state.vendors.some((v) => v.textable !== false && digits(v.phone) === d)
   );
 }
 
