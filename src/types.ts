@@ -81,6 +81,10 @@ export type Repair = {
   upkeep?: boolean;
   /** Repair people who already said no, so they aren't suggested again. */
   tried?: string[];
+  /** What the tenant added after reporting it ("kitchen sink, since this morning"). */
+  details?: string[];
+  /** How many more texts from the tenant count as details of this repair, not new ones. */
+  intakeLeft?: number;
   /** Photos and videos the tenant sent about it (links), passed on to the repair person. */
   photos?: string[];
   /**

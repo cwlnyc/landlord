@@ -1,4 +1,5 @@
 import { pickVendor, readContactCard, readContactName, tradeForProblem, tradeLabel } from "./match.js";
+import { intakeReply } from "./intake.js";
 import { tickUpkeep, upkeepCommand } from "./upkeep.js";
 import { formatOffers, formatSlot, mentionsTime, offersTime, parseOffers, parseVisitTime, pickOffer } from "./parse-time.js";
 import { isQuietHour } from "./compliance.js";
@@ -184,7 +185,7 @@ function needsHelpWithout(state: State, from: string, body: string, now: Date): 
 
   const unit = unitFrom(state, from);
   if (unit) {
-    if (questionFor(state, unit)) return null;
+    if (questionFor(state, unit) || (!state.repairs.some((r) => r.unitId === unit.id && r.status === "asking-tenant") && intakeFor(state, unit, now))) return null;
     const waiting = state.repairs.find((r) => r.unitId === unit.id && r.status === "asking-tenant");
     if (!waiting) return null;
     if (waiting.offers?.length) {
@@ -250,7 +251,7 @@ export function isNewRepair(state: State, from: string, body: string): boolean {
   const unit = unitFrom(state, from);
   if (!unit || landlordOf(state, from) || vendorFrom(state, from)) return false;
   const text = body.trim();
-  if (questionFor(state, unit)) return false;
+  if (questionFor(state, unit) || intakeFor(state, unit, new Date())) return false;
   const waiting = state.repairs.find((r) => r.unitId === unit.id && r.status === "asking-tenant");
   if (waiting?.offers?.length && (pickOffer(waiting.offers, text, new Date()) !== null || isYes(text))) return false;
   return !(waiting && (isYes(text) || isNo(text))) && !isRentText(text);
@@ -285,6 +286,9 @@ function fromTenant(state: State, unit: Unit, text: string, now: Date, hints: Te
     return isYes(text) ? tenantConfirms(state, waiting, now) : tenantDeclines(state, waiting);
   }
   if (isRentText(text)) return tenantRentText(state, unit, text, now);
+  // Just reported something: what they send next is more about it.
+  const open = intakeFor(state, unit, now);
+  if (open && (text || media.length)) return addDetails(state, open, unit, text, media);
   if (!text && media.length) {
     return [{ to: unit.tenant.phone, body: "Thanks for the photo. What's the problem? Text a few words and I'll tell your landlord." }];
   }
@@ -298,18 +302,56 @@ function fromTenant(state: State, unit: Unit, text: string, now: Date, hints: Te
     ...(tradeForProblem(text) ?? hints.trade ? { trade: (tradeForProblem(text) ?? hints.trade)! } : {}),
     urgent: hints.urgent ?? URGENT.test(text),
     ...(media.length ? { photos: media } : {}),
+    intakeLeft: 2,
   };
   state.repairs.push(repair);
   return [
-    {
-      to: unit.tenant.phone,
-      body: `Got it, thanks ${unit.tenant.name}. I've told your landlord. You'll get a text when a repair person has a time.`,
-    },
+    { to: unit.tenant.phone, body: intakeReply(unit.tenant.name, text, needOf(repair), media.length > 0) },
     ...toLandlords(
       state,
       `New repair${repair.urgent ? " (sounds urgent)" : ""} at ${unit.address} (#${repair.id}), from ${unit.tenant.name}:\n"${text}"\n\n${suggest(state, repair)}`,
     ).map((o) => (media.length ? { ...o, media } : o)),
   ];
+}
+
+const INTAKE_HOURS = 12;
+
+/** The repair this tenant just reported, while their next texts still count as details of it. */
+function intakeFor(state: State, unit: Unit, now: Date): Repair | undefined {
+  return [...state.repairs]
+    .reverse()
+    .find(
+      (r) =>
+        r.unitId === unit.id &&
+        (r.intakeLeft ?? 0) > 0 &&
+        (r.status === "new" || r.status === "asking-vendor") &&
+        now.getTime() - new Date(r.createdAt).getTime() < INTAKE_HOURS * HOUR,
+    );
+}
+
+/** More about a repair from the tenant: saved, and passed to the landlord and any repair person on it. */
+function addDetails(state: State, repair: Repair, unit: Unit, text: string, media: string[]): Outbound[] {
+  if (text) repair.details = [...(repair.details ?? []), text];
+  if (media.length) repair.photos = [...(repair.photos ?? []), ...media];
+  // Words and a photo is all the repair person needs; otherwise one more text counts.
+  repair.intakeLeft = repair.details?.length && repair.photos?.length ? 0 : (repair.intakeLeft ?? 1) - 1;
+  const name = unit.tenant.name;
+  const said = text ? `"${text}"` : `a ${media.length > 1 ? "few photos" : "photo"}`;
+  const withMedia = (o: Outbound): Outbound => (media.length ? { ...o, media } : o);
+  const askPhoto = !repair.photos?.length && (repair.intakeLeft ?? 0) > 0;
+  const out: Outbound[] = [
+    { to: unit.tenant.phone, body: `Thanks, that helps. I've passed it on.${askPhoto ? " A photo would help too, if you can." : ""}` },
+    // Still waiting on the landlord's answer: ask again, so the newest text has the question.
+    ...toLandlords(
+      state,
+      `${name} added about ${placeOf(state, repair)}: ${said}${repair.status === "new" && repair.suggested ? `\n\n${suggest(state, repair)}` : ""}`,
+    ).map(withMedia),
+  ];
+  const vendor = vendorOf(state, repair);
+  if (vendor && vendor.textable !== false && repair.status !== "new") {
+    out.push(withMedia({ to: vendor.phone, body: `${name} added about ${unit.address}: ${said}` }));
+  }
+  return out;
 }
 
 /** The repair whose repair person is waiting on this tenant's answer. */
@@ -601,7 +643,7 @@ function sendTo(state: State, vendor: Vendor, repair: Repair): Outbound[] {
   return [
     {
       to: vendor.phone,
-      body: `Hi ${vendor.name}, this is the repair line for ${state.landlords[0]?.name ?? "your landlord"}. Job at ${unit.address}: "${repair.text}". When could you go?`,
+      body: `Hi ${vendor.name}, this is the repair line for ${state.landlords[0]?.name ?? "your landlord"}. Job at ${unit.address}: "${repair.text}".${repair.details?.length ? ` ${unit.tenant.name} adds: "${repair.details.join(" / ")}".` : ""} When could you go?`,
       ...(repair.photos?.length ? { media: repair.photos } : {}),
     },
     ...toLandlords(state, `Asked ${vendor.name} about ${placeOf(state, repair)}. I'll text you when they reply.`),

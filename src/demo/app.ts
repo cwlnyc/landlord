@@ -81,6 +81,10 @@ async function actors(out: Outbound[]) {
       if (/Will you be home then\?/.test(o.body)) {
         await wait(1800);
         void text(o.to, "yeah I'll be here");
+      } else if (/To help the repair person: Is it no water at all/.test(o.body)) {
+        // Maria answers the line's question with words and a photo, like Mom's tenants do.
+        await wait(2200);
+        void text(o.to, "no hot water at all. it's dripping under the kitchen sink too", [PHOTO]);
       } else if (/asks: /.test(o.body)) {
         await wait(2200);
         void text(o.to, "here, it's dripping under the sink", [PHOTO]);
@@ -94,7 +98,8 @@ async function actors(out: Outbound[]) {
     } else if (to === digits(JOHN)) {
       if (/Job at .*When could you go\?/.test(o.body)) {
         await wait(2000);
-        void text(o.to, "what's the issue? can I see a pic?");
+        // With Maria's details and photo already in the job text, John can just offer times.
+        void text(o.to, o.media?.length ? "ok I see it, probably the water heater. I can do tue 9am or wed 2pm" : "what's the issue? can I see a pic?");
       } else if (/When could you go to /.test(o.body)) {
         await wait(2400);
         void text(o.to, "ok I see it, just a loose fitting. I can do tue 9am or wed 2pm");
